@@ -8,7 +8,11 @@ const META_KEY = 'iys:meta'
 function getClient(): Redis {
   const url = process.env.REDIS_URL
   if (!url) throw new Error('REDIS_URL environment variable is not set')
-  return new Redis(url, { tls: { rejectUnauthorized: false }, maxRetriesPerRequest: 3 })
+  const useTLS = url.startsWith('rediss://')
+  return new Redis(url, {
+    ...(useTLS ? { tls: { rejectUnauthorized: false } } : {}),
+    maxRetriesPerRequest: 3,
+  })
 }
 
 async function withRedis<T>(fn: (client: Redis) => Promise<T>): Promise<T> {
