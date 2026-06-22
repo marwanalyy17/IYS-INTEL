@@ -1,15 +1,44 @@
-import { kv } from '@vercel/kv'
+import Redis from 'ioredis'
 import { ScrapedProduct } from './scraper'
 
 const PRODUCTS_KEY = 'iys:products'
 const BRANDS_KEY = 'iys:custom_brands'
 const META_KEY = 'iys:meta'
 
+function getClient(): Redis {
+  const url = process.env.REDIS_URL
+  if (!url) throw new Error('REDIS_URL environment variable is not set')
+  return new Redis(url, { tls: { rejectUnauthorized: false }, maxRetriesPerRequest: 3 })
+}
+
+async function withRedis<T>(fn: (client: Redis) => Promise<T>): Promise<T> {
+  const client = getClient()
+  try {
+    return await fn(client)
+  } finally {
+    client.disconnect()
+  }
+}
+
+async function redisGet<T>(key: string): Promise<T | null> {
+  return withRedis(async client => {
+    const raw = await client.get(key)
+    if (!raw) return null
+    return JSON.parse(raw) as T
+  })
+}
+
+async function redisSet(key: string, value: unknown): Promise<void> {
+  return withRedis(async client => {
+    await client.set(key, JSON.stringify(value))
+  })
+}
+
 // ── Products ──────────────────────────────────────────────────────────────────
 
 export async function getAllProducts(): Promise<ScrapedProduct[]> {
   try {
-    const data = await kv.get<ScrapedProduct[]>(PRODUCTS_KEY)
+    const data = await redisGet<ScrapedProduct[]>(PRODUCTS_KEY)
     return data ?? []
   } catch {
     return []
@@ -17,8 +46,8 @@ export async function getAllProducts(): Promise<ScrapedProduct[]> {
 }
 
 export async function saveAllProducts(products: ScrapedProduct[]): Promise<void> {
-  await kv.set(PRODUCTS_KEY, products)
-  await kv.set(META_KEY, {
+  await redisSet(PRODUCTS_KEY, products)
+  await redisSet(META_KEY, {
     lastScraped: new Date().toISOString(),
     totalProducts: products.length,
     brandCount: new Set(products.map(p => p.brandId)).size,
@@ -46,7 +75,7 @@ export interface ScrapeMeta {
 
 export async function getMeta(): Promise<ScrapeMeta> {
   try {
-    const meta = await kv.get<ScrapeMeta>(META_KEY)
+    const meta = await redisGet<ScrapeMeta>(META_KEY)
     return meta ?? { lastScraped: null, totalProducts: 0, brandCount: 0 }
   } catch {
     return { lastScraped: null, totalProducts: 0, brandCount: 0 }
@@ -67,7 +96,7 @@ export interface CustomBrand {
 
 export async function getCustomBrands(): Promise<CustomBrand[]> {
   try {
-    const data = await kv.get<CustomBrand[]>(BRANDS_KEY)
+    const data = await redisGet<CustomBrand[]>(BRANDS_KEY)
     return data ?? []
   } catch {
     return []
@@ -77,10 +106,10 @@ export async function getCustomBrands(): Promise<CustomBrand[]> {
 export async function addCustomBrand(brand: CustomBrand): Promise<void> {
   const existing = await getCustomBrands()
   const filtered = existing.filter(b => b.id !== brand.id)
-  await kv.set(BRANDS_KEY, [...filtered, brand])
+  await redisSet(BRANDS_KEY, [...filtered, brand])
 }
 
 export async function removeCustomBrand(id: string): Promise<void> {
   const existing = await getCustomBrands()
-  await kv.set(BRANDS_KEY, existing.filter(b => b.id !== id))
+  await redisSet(BRANDS_KEY, existing.filter(b => b.id !== id))
 }
