@@ -252,7 +252,7 @@ export default function Dashboard() {
                 <span className="text-danger flex items-center gap-1"><WifiOff size={11} /> {error}</span>
               ) : (
                 <><strong className="text-white">{filtered.length.toLocaleString()}</strong> products across <strong className="text-white">{brandCount}</strong> brands
-                {query && <> for "<em className="text-info">{query}</em>"</>}
+                {query && <> for &quot;<em className="text-info">{query}</em>&quot;</>}
                 </>
               )}
             </span>
