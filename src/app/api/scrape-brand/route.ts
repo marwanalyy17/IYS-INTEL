@@ -9,13 +9,17 @@ export const maxDuration = 60
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { name, url, tier = 'mid', threat = 'm' } = body
+    const { name, url, tier = 'mid', threat = 'm', currency = 'EGP' } = body
 
     if (!name || !url) {
       return NextResponse.json({ error: 'name and url are required' }, { status: 400 })
     }
 
-    const normalizedUrl = url.replace(/\/$/, '')
+    let formattedUrl = url.trim()
+    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+      formattedUrl = `https://${formattedUrl}`
+    }
+    const normalizedUrl = formattedUrl.replace(/\/$/, '')
     const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_')
 
     // Auto-detect Shopify vs HTML
@@ -28,6 +32,7 @@ export async function POST(req: NextRequest) {
       strategy,
       tier,
       threat,
+      currency,
       priceRange: [0, 99999],
       aesthetic: 'User-added brand',
       drops: [],
@@ -44,6 +49,7 @@ export async function POST(req: NextRequest) {
       strategy,
       tier,
       threat,
+      currency,
       addedAt: new Date().toISOString(),
     })
 

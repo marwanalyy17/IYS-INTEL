@@ -7,7 +7,7 @@ import { ScrapedProduct } from '@/lib/scraper'
 import { Brand } from '@/lib/brands'
 
 export const runtime = 'nodejs'
-export const maxDuration = 300
+export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
   // Verify this is a legitimate Vercel cron call (or internal trigger)
@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
       strategy: c.strategy,
       tier: c.tier,
       threat: c.threat,
+      currency: c.currency,
       priceRange: [0, 99999] as [number, number],
       aesthetic: 'User-added brand',
       drops: [],

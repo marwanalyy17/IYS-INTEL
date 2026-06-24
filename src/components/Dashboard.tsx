@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ScrapedProduct } from '@/lib/scraper'
 import { expandQuery, scoreProduct, IYS_QUICK_TAGS } from '@/lib/synonyms'
 import { BRANDS } from '@/lib/brands'
+import { convertToEGP } from '@/lib/currency'
 import ProductTable from './ProductTable'
 import ProductGrid from './ProductGrid'
 import BrandPanel from './BrandPanel'
@@ -28,9 +29,12 @@ export default function Dashboard() {
   const [meta, setMeta] = useState<Meta>({ lastScraped: null, totalProducts: 0, brandCount: 0 })
   const [filtered, setFiltered] = useState<ScrapedProduct[]>([])
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [activeTag, setActiveTag] = useState('')
   const [sort, setSort] = useState<SortKey>('relevance')
   const [view, setView] = useState<ViewMode>('table')
+  const [showEGP, setShowEGP] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(100)
   const [panelOpen, setPanelOpen] = useState(true)
   const [addBrandOpen, setAddBrandOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -57,6 +61,12 @@ export default function Dashboard() {
 
   useEffect(() => { loadProducts() }, [loadProducts])
 
+  // ── Debounce search query ──────────────────────────────────────────────────
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 250)
+    return () => clearTimeout(t)
+  }, [query])
+
   // ── Trigger manual scrape ──────────────────────────────────────────────────
   const triggerScrape = async () => {
     setScraping(true)
@@ -74,7 +84,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!products.length) { setFiltered([]); return }
 
-    const q = query.trim()
+    const q = debouncedQuery.trim()
     let result: (ScrapedProduct & { _score?: number })[] = []
 
     if (!q) {
@@ -91,8 +101,12 @@ export default function Dashboard() {
     }
 
     // Apply sort (after relevance)
-    if (sort === 'price-asc') result.sort((a, b) => (a.price ?? 0) - (b.price ?? 0))
-    else if (sort === 'price-desc') result.sort((a, b) => (b.price ?? 0) - (a.price ?? 0))
+    const getEgpPrice = (p: ScrapedProduct) => {
+      const cur = BRANDS.find(b => b.id === p.brandId)?.currency || p.currency || 'EGP'
+      return convertToEGP(p.price ?? 0, cur)
+    }
+    if (sort === 'price-asc') result.sort((a, b) => getEgpPrice(a) - getEgpPrice(b))
+    else if (sort === 'price-desc') result.sort((a, b) => getEgpPrice(b) - getEgpPrice(a))
     else if (sort === 'brand') result.sort((a, b) => a.brandName.localeCompare(b.brandName))
     else if (sort === 'threat') {
       const o: Record<string, number> = { h: 0, m: 1, l: 2 }
@@ -100,7 +114,10 @@ export default function Dashboard() {
     }
 
     setFiltered(result)
-  }, [products, query, sort])
+    setVisibleCount(100) // Reset visible count on new search/sort
+  }, [products, debouncedQuery, sort])
+
+  const displayedProducts = filtered.slice(0, visibleCount)
 
   const handleTag = (q: string, label: string) => {
     if (activeTag === label) {
@@ -171,6 +188,8 @@ export default function Dashboard() {
         >
           <Building2 size={12} /> Brands
         </button>
+
+        <span className="text-[9px] text-white/25 uppercase tracking-widest whitespace-nowrap ml-auto">Powered by Marwan Aly</span>
       </div>
 
       {/* ── Quick tags ── */}
@@ -228,6 +247,15 @@ export default function Dashboard() {
             </select>
 
             <div className="flex gap-1">
+              <label className="flex items-center gap-1.5 mr-2 text-[11px] text-white/60 cursor-pointer hover:text-white transition-colors">
+                <input 
+                  type="checkbox" 
+                  checked={showEGP} 
+                  onChange={e => setShowEGP(e.target.checked)}
+                  className="accent-accent"
+                />
+                View in EGP
+              </label>
               <button onClick={() => setView('table')} className={`flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border transition-colors ${view === 'table' ? 'bg-accent/10 text-info border-accent/40' : 'border-white/[0.13] text-white/40 hover:text-white/70'}`}>
                 <Table2 size={12} /> Table
               </button>
@@ -253,10 +281,25 @@ export default function Dashboard() {
                   </button>
                 )}
               </div>
-            ) : view === 'table' ? (
-              <ProductTable products={filtered} />
             ) : (
-              <ProductGrid products={filtered} />
+              <>
+                {view === 'table' ? (
+                  <ProductTable products={displayedProducts} showEGP={showEGP} />
+                ) : (
+                  <ProductGrid products={displayedProducts} showEGP={showEGP} />
+                )}
+
+                {visibleCount < filtered.length && (
+                  <div className="flex justify-center py-6 border-t border-white/[0.05]">
+                    <button
+                      onClick={() => setVisibleCount(v => v + 100)}
+                      className="px-4 py-2 text-[11px] bg-surface2 border border-white/[0.13] rounded-md text-white/70 hover:text-white hover:bg-white/[0.07] transition-colors"
+                    >
+                      Load more products ({filtered.length - visibleCount} remaining)
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

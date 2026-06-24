@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ScrapedProduct } from '@/lib/scraper'
 import { Brand } from '@/lib/brands'
 import { X, ExternalLink } from 'lucide-react'
@@ -51,6 +51,14 @@ export default function BrandPanel({ products, allBrands, onClose }: Props) {
   const brandsWithoutData = allBrands.filter(b => !activeBrandIds.has(b.id))
   const displayBrands = [...brandsWithData, ...brandsWithoutData]
 
+  const brandCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    products.forEach(p => {
+      counts[p.brandId] = (counts[p.brandId] || 0) + 1
+    })
+    return counts
+  }, [products])
+
   return (
     <div className="w-[268px] min-w-[268px] flex flex-col bg-surface border-l border-white/[0.07] overflow-hidden">
       {/* Header */}
@@ -88,7 +96,7 @@ export default function BrandPanel({ products, allBrands, onClose }: Props) {
 
       <div className="flex-1 overflow-y-auto px-2.5 pb-3">
         {displayBrands.map(b => {
-          const count = products.filter(p => p.brandId === b.id).length
+          const count = brandCounts[b.id] || 0
           return (
             <button
               key={b.id}

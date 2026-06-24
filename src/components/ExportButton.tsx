@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { Download, ChevronDown } from 'lucide-react'
 import { ScrapedProduct } from '@/lib/scraper'
+import { BRANDS } from '@/lib/brands'
+import { convertToEGP } from '@/lib/currency'
 import * as XLSX from 'xlsx'
 
 interface Props { products: ScrapedProduct[] }
@@ -10,17 +12,23 @@ interface Props { products: ScrapedProduct[] }
 export default function ExportButton({ products }: Props) {
   const [open, setOpen] = useState(false)
 
-  const rows = () => products.map(p => ({
-    Brand: p.brandName,
-    Product: p.name,
-    Category: p.category,
-    'Price (EGP)': p.price || '',
-    Tier: p.tier,
-    'Threat vs IYS': p.threat === 'h' ? 'Direct threat' : p.threat === 'm' ? 'Adjacent' : 'Low overlap',
-    'Product URL': p.productUrl || p.brandUrl,
-    'Image URL': p.imageUrl,
-    'Scraped At': p.scrapedAt,
-  }))
+  const rows = () => products.map(p => {
+    const cur = BRANDS.find(b => b.id === p.brandId)?.currency || p.currency || 'EGP'
+    return {
+      Brand: p.brandName,
+      Product: p.name,
+      Category: p.category,
+      Price: p.price || '',
+      Currency: cur,
+      'Price (EGP)': cur === 'EGP' ? (p.price || '') : convertToEGP(p.price, cur),
+      'Compare At Price': p.compareAtPrice || '',
+      Tier: p.tier,
+      'Threat vs IYS': p.threat === 'h' ? 'Direct threat' : p.threat === 'm' ? 'Adjacent' : 'Low overlap',
+      'Product URL': p.productUrl || p.brandUrl,
+      'Image URL': p.imageUrl,
+      'Scraped At': p.scrapedAt,
+    }
+  })
 
   const exportCSV = () => {
     const data = rows()

@@ -2,10 +2,12 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { ScrapedProduct } from '@/lib/scraper'
 import { ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
+import { convertToEGP, formatCurrency } from '@/lib/currency'
+import { ScrapedProduct } from '@/lib/scraper'
+import { BRANDS } from '@/lib/brands'
 
-interface Props { products: ScrapedProduct[] }
+interface Props { products: ScrapedProduct[]; showEGP?: boolean }
 
 const IYS_BENCHMARKS: Record<string, { price: number; label: string }> = {
   'cargo pants':  { price: 1499, label: 'IYS Pants' },
@@ -46,7 +48,7 @@ function threatBadge(threat: string) {
   return <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-success/10 text-success border border-success/20">Low overlap</span>
 }
 
-export default function ProductTable({ products }: Props) {
+export default function ProductTable({ products, showEGP }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null)
 
   const toggle = (id: string) => setExpanded(v => v === id ? null : id)
@@ -58,7 +60,7 @@ export default function ProductTable({ products }: Props) {
           <th className="text-left px-3 py-2 text-[10px] font-medium text-white/30 uppercase tracking-widest border-b border-white/[0.07]" style={{ width: 48 }}>Photo</th>
           <th className="text-left px-3 py-2 text-[10px] font-medium text-white/30 uppercase tracking-widest border-b border-white/[0.07]" style={{ width: 120 }}>Brand</th>
           <th className="text-left px-3 py-2 text-[10px] font-medium text-white/30 uppercase tracking-widest border-b border-white/[0.07]">Product</th>
-          <th className="text-left px-3 py-2 text-[10px] font-medium text-white/30 uppercase tracking-widest border-b border-white/[0.07]" style={{ width: 120 }}>Price (EGP)</th>
+          <th className="text-left px-3 py-2 text-[10px] font-medium text-white/30 uppercase tracking-widest border-b border-white/[0.07]" style={{ width: 140 }}>{showEGP ? 'Price (EGP)' : 'Price'}</th>
           <th className="text-left px-3 py-2 text-[10px] font-medium text-white/30 uppercase tracking-widest border-b border-white/[0.07]" style={{ width: 110 }}>vs IYS</th>
           <th className="text-left px-3 py-2 text-[10px] font-medium text-white/30 uppercase tracking-widest border-b border-white/[0.07]" style={{ width: 90 }}>Action</th>
         </tr>
@@ -66,7 +68,18 @@ export default function ProductTable({ products }: Props) {
       <tbody>
         {products.map(p => {
           const isExp = expanded === p.id
-          const vs = getVsIYS(p.price, p.category)
+          
+          // Always use the brand config currency as source of truth.
+          // Old scraped data in Redis incorrectly stores 'EGP' for all brands.
+          const brandCurrency = BRANDS.find(b => b.id === p.brandId)?.currency || p.currency || 'EGP'
+
+          const egpPrice = convertToEGP(p.price, brandCurrency)
+          const vs = getVsIYS(egpPrice, p.category)
+          
+          const displayPrice = showEGP ? egpPrice : p.price
+          const displayCompare = p.compareAtPrice ? (showEGP ? convertToEGP(p.compareAtPrice, brandCurrency) : p.compareAtPrice) : undefined
+          const curr = showEGP ? 'EGP' : brandCurrency
+
           return (
             <>
               <tr
@@ -79,6 +92,7 @@ export default function ProductTable({ products }: Props) {
                     <img
                       src={p.imageUrl}
                       alt={p.name}
+                      loading="lazy"
                       width={32}
                       height={32}
                       className="w-8 h-8 rounded-md object-cover border border-white/[0.07]"
@@ -100,9 +114,14 @@ export default function ProductTable({ products }: Props) {
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  <span className={`font-semibold ${priceTierClass(p.tier)}`}>
-                    {p.price ? `${p.price.toLocaleString('en-EG')} EGP` : 'N/A'}
-                  </span>
+                  <div className={`font-semibold ${priceTierClass(p.tier)}`}>
+                    {p.price ? formatCurrency(displayPrice, curr) : 'N/A'}
+                  </div>
+                  {displayCompare && (
+                    <div className="text-[10px] text-white/30 line-through">
+                      {formatCurrency(displayCompare, curr)}
+                    </div>
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   {threatBadge(p.threat)}
@@ -131,6 +150,7 @@ export default function ProductTable({ products }: Props) {
                           <img
                             src={p.imageUrl}
                             alt={p.name}
+                            loading="lazy"
                             className="w-28 h-36 object-cover rounded-lg border border-white/[0.07]"
                             onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                           />
@@ -151,8 +171,15 @@ export default function ProductTable({ products }: Props) {
                         </div>
                         <div>
                           <div className="text-[9px] text-white/30 uppercase tracking-widest mb-0.5">Price</div>
-                          <div className={`text-[20px] font-semibold ${priceTierClass(p.tier)}`}>
-                            {p.price ? `${p.price.toLocaleString('en-EG')} EGP` : 'N/A'}
+                          <div className="flex items-baseline gap-2">
+                            <div className={`text-[20px] font-semibold ${priceTierClass(p.tier)}`}>
+                              {p.price ? formatCurrency(displayPrice, curr) : 'N/A'}
+                            </div>
+                            {displayCompare && (
+                              <div className="text-[12px] text-white/40 line-through">
+                                {formatCurrency(displayCompare, curr)}
+                              </div>
+                            )}
                           </div>
                         </div>
                         {p.category && (

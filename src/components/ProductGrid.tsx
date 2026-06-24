@@ -2,8 +2,10 @@
 
 import { ScrapedProduct } from '@/lib/scraper'
 import { ExternalLink } from 'lucide-react'
+import { convertToEGP, formatCurrency } from '@/lib/currency'
+import { BRANDS } from '@/lib/brands'
 
-interface Props { products: ScrapedProduct[] }
+interface Props { products: ScrapedProduct[]; showEGP?: boolean }
 
 function priceTierClass(tier: string) {
   if (tier === 'budget') return 'text-success'
@@ -11,10 +13,19 @@ function priceTierClass(tier: string) {
   return 'text-info'
 }
 
-export default function ProductGrid({ products }: Props) {
+export default function ProductGrid({ products, showEGP }: Props) {
   return (
     <div className="p-4 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))' }}>
-      {products.map(p => (
+      {products.map(p => {
+        // Always use the brand config currency as source of truth.
+        // Old scraped data in Redis incorrectly stores 'EGP' for all brands.
+        const brandCurrency = BRANDS.find(b => b.id === p.brandId)?.currency || p.currency || 'EGP'
+
+        const displayPrice = showEGP ? convertToEGP(p.price, brandCurrency) : p.price
+        const displayCompare = p.compareAtPrice ? (showEGP ? convertToEGP(p.compareAtPrice, brandCurrency) : p.compareAtPrice) : undefined
+        const curr = showEGP ? 'EGP' : brandCurrency
+
+        return (
         <div
           key={p.id}
           className="bg-surface border border-white/[0.07] rounded-xl overflow-hidden hover:border-white/[0.15] transition-colors group"
@@ -22,10 +33,11 @@ export default function ProductGrid({ products }: Props) {
           {/* Product image */}
           <div className="aspect-[3/4] bg-surface2 flex items-center justify-center overflow-hidden">
             {p.imageUrl ? (
-              <img
-                src={p.imageUrl}
-                alt={p.name}
-                className="w-full h-full object-cover"
+                <img
+                  src={p.imageUrl}
+                  alt={p.name}
+                  loading="lazy"
+                  className="w-full h-full object-cover"
                 onError={e => {
                   const el = e.target as HTMLImageElement
                   el.style.display = 'none'
@@ -44,8 +56,15 @@ export default function ProductGrid({ products }: Props) {
             {p.category && (
               <div className="text-[10px] text-white/25 border border-white/[0.07] px-1.5 py-0.5 rounded-full inline-block mb-2">{p.category}</div>
             )}
-            <div className={`text-[14px] font-semibold mb-2 ${priceTierClass(p.tier)}`}>
-              {p.price ? `${p.price.toLocaleString('en-EG')} EGP` : 'N/A'}
+            <div className="flex items-baseline gap-2 mb-2">
+              <div className={`text-[14px] font-semibold ${priceTierClass(p.tier)}`}>
+                {p.price ? formatCurrency(displayPrice, curr) : 'N/A'}
+              </div>
+              {displayCompare && (
+                <div className="text-[10px] text-white/40 line-through">
+                  {formatCurrency(displayCompare, curr)}
+                </div>
+              )}
             </div>
             <a
               href={p.productUrl || p.brandUrl}
@@ -57,7 +76,8 @@ export default function ProductGrid({ products }: Props) {
             </a>
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

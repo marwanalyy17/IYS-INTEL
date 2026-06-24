@@ -11,6 +11,7 @@ export interface ScrapedProduct {
   threat: string
   name: string
   price: number
+  compareAtPrice?: number
   currency: string
   productUrl: string
   imageUrl: string
@@ -25,11 +26,76 @@ const HEADERS = {
   'Accept-Language': 'en-US,en;q=0.9',
 }
 
+const KNOWN_CURRENCIES = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'KWD', 'EGP']
+
+// ── Auto-detect Shopify store currency from homepage HTML ──────────────────────
+
+async function detectShopifyCurrency(baseUrl: string): Promise<string | null> {
+  try {
+    const { data: html } = await axios.get(baseUrl, {
+      headers: { ...HEADERS, Accept: 'text/html' },
+      timeout: 10000,
+    })
+
+    // Method 1: Look for Shopify.currency.active in script tags
+    // e.g. Shopify.currency = {"active":"USD", ...}
+    const currencyActiveMatch = html.match(/"active"\s*:\s*"([A-Z]{3})"/i)
+    if (currencyActiveMatch && KNOWN_CURRENCIES.includes(currencyActiveMatch[1].toUpperCase())) {
+      return currencyActiveMatch[1].toUpperCase()
+    }
+
+    // Method 2: Look for "currency":"USD" pattern (common in Shopify theme JSON)
+    const currencyFieldMatch = html.match(/"currency"\s*:\s*"([A-Z]{3})"/i)
+    if (currencyFieldMatch && KNOWN_CURRENCIES.includes(currencyFieldMatch[1].toUpperCase())) {
+      return currencyFieldMatch[1].toUpperCase()
+    }
+
+    // Method 3: Look for money_format containing $ € £
+    const moneyFormatMatch = html.match(/"money_format"\s*:\s*"([^"]+)"/i)
+    if (moneyFormatMatch) {
+      const fmt = moneyFormatMatch[1]
+      if (fmt.includes('$') && !fmt.includes('£')) return 'USD'
+      if (fmt.includes('€')) return 'EUR'
+      if (fmt.includes('£')) return 'GBP'
+    }
+
+    // Method 4: Look for presentment currency meta tags or data attributes
+    const $ = cheerio.load(html)
+    const metaCurrency = $('meta[property="og:price:currency"]').attr('content')
+    if (metaCurrency && KNOWN_CURRENCIES.includes(metaCurrency.toUpperCase())) {
+      return metaCurrency.toUpperCase()
+    }
+
+    // Method 5: Scan visible price elements for currency symbols
+    const priceText = $('[class*="price"], .price, [data-price]').first().text()
+    if (priceText) {
+      if (priceText.includes('$')) return 'USD'
+      if (priceText.includes('€')) return 'EUR'
+      if (priceText.includes('£')) return 'GBP'
+    }
+
+  } catch (err) {
+    console.warn(`[currency detect] Could not detect currency for ${baseUrl}:`, err)
+  }
+  return null
+}
+
 // ── Shopify scraper ────────────────────────────────────────────────────────────
 
 export async function scrapeShopify(brand: Brand): Promise<ScrapedProduct[]> {
   const products: ScrapedProduct[] = []
   const base = brand.url.replace(/\/$/, '')
+
+  // Determine currency: brand config > auto-detect from homepage > fallback EGP
+  let currency = brand.currency
+  if (!currency) {
+    const detected = await detectShopifyCurrency(base)
+    currency = detected || 'EGP'
+    if (detected) {
+      console.log(`[${brand.name}] Auto-detected currency: ${detected}`)
+    }
+  }
+
   let page = 1
 
   while (true) {
@@ -46,6 +112,7 @@ export async function scrapeShopify(brand: Brand): Promise<ScrapedProduct[]> {
       for (const p of data.products) {
         const variant = p.variants?.[0] ?? {}
         const rawPrice = parseFloat(variant.price ?? '0')
+        const compareAtPrice = parseFloat(variant.compare_at_price ?? '0')
         const imageUrl = formatShopifyImage(p.images?.[0]?.src ?? '')
         const handle = p.handle ?? ''
 
@@ -58,7 +125,8 @@ export async function scrapeShopify(brand: Brand): Promise<ScrapedProduct[]> {
           threat: brand.threat,
           name: (p.title ?? '').trim(),
           price: rawPrice,
-          currency: 'EGP',
+          compareAtPrice: compareAtPrice > rawPrice ? compareAtPrice : undefined,
+          currency,
           productUrl: handle ? `${base}/products/${handle}` : base,
           imageUrl,
           category: (p.product_type ?? '').trim(),
@@ -109,6 +177,22 @@ export async function scrapeHtml(brand: Brand): Promise<ScrapedProduct[]> {
       const priceText = $(el).find(sel.price).first().text().trim()
       const price = extractPrice(priceText)
 
+      let compareAtPrice: number | undefined
+      if (sel.compareAtPrice) {
+        const cpText = $(el).find(sel.compareAtPrice).first().text().trim()
+        if (cpText) compareAtPrice = extractPrice(cpText)
+      }
+
+      let currency = brand.currency
+      if (!currency) {
+        if (priceText.includes('$')) currency = 'USD'
+        else if (priceText.includes('€')) currency = 'EUR'
+        else if (priceText.includes('£')) currency = 'GBP'
+        else if (priceText.toLowerCase().includes('aed')) currency = 'AED'
+        else if (priceText.toLowerCase().includes('sar')) currency = 'SAR'
+        else currency = 'EGP'
+      }
+
       let imgSrc = $(el).find(sel.image).first().attr('src')
         ?? $(el).find(sel.image).first().attr('data-src')
         ?? $(el).find(sel.image).first().attr('data-lazy-src')
@@ -129,7 +213,8 @@ export async function scrapeHtml(brand: Brand): Promise<ScrapedProduct[]> {
         threat: brand.threat,
         name,
         price,
-        currency: 'EGP',
+        compareAtPrice: (compareAtPrice && compareAtPrice > price) ? compareAtPrice : undefined,
+        currency,
         productUrl: href || brand.url,
         imageUrl: imgSrc,
         category: guessCategory(name),

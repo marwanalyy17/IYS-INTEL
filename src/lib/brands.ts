@@ -4,6 +4,7 @@ export interface BrandSelectors {
   productList: string
   name: string
   price: string
+  compareAtPrice?: string
   image: string
   link: string
 }
@@ -18,6 +19,7 @@ export interface Brand {
   threat: 'h' | 'm' | 'l'
   aesthetic: string
   drops: string[]
+  currency?: string
   selectors?: BrandSelectors
 }
 
@@ -28,8 +30,8 @@ export const BRANDS: Brand[] = [
   { id: 'coddiwomple', name: 'Coddi Womple', url: 'https://coddiwmple.com', strategy: 'shopify', tier: 'mid', priceRange: [600, 2200], threat: 'm', aesthetic: 'Travel-inspired wanderlust, relaxed silhouettes, earthy tones', drops: ['Nomad Collection', 'Desert Wanderer', 'SS25 Escape'] },
   { id: 'notfound', name: 'Not Found', url: 'https://notfoundco.com', strategy: 'shopify', tier: 'mid', priceRange: [550, 2000], threat: 'm', aesthetic: 'Anti-trend minimalism, monochrome palettes, conceptual identity', drops: ['Void Season', 'Error Drop 404', 'Blank Canvas'] },
   { id: 'wishmeluck', name: 'Wish Me Luck', url: 'https://wishmeluckbrand.com', strategy: 'shopify', tier: 'mid', priceRange: [450, 1500], threat: 'h', aesthetic: 'Optimistic streetwear, colorful graphics, youthful local Cairo identity', drops: ['Lucky Season', 'Good Vibes Drop', 'Cairo Summer'] },
-  { id: 'pompeii', name: 'Pompeii', url: 'https://pompeiibrand.com', strategy: 'shopify', tier: 'mid', priceRange: [700, 2500], threat: 'm', aesthetic: 'Mediterranean resort wear, earthy ancient aesthetic', drops: ['Ruins Collection', 'Mediterranean SS', 'Terra Drop'] },
-  { id: 'fakegods', name: 'Fake Gods', url: 'https://fakegodsbrand.store', strategy: 'shopify', tier: 'mid', priceRange: [500, 1800], threat: 'h', aesthetic: 'Irreverent graphics, dark humor, anti-establishment streetwear', drops: ['False Idols Drop', 'Dark Season', 'Sacred Drop'] },
+  { id: 'pompeii', name: 'Pompeii', url: 'https://pompeiibrand.com', strategy: 'shopify', tier: 'mid', priceRange: [700, 2500], threat: 'm', aesthetic: 'Mediterranean resort wear, earthy ancient aesthetic', drops: ['Ruins Collection', 'Mediterranean SS', 'Terra Drop'], currency: 'EUR' },
+  { id: 'fakegods', name: 'Fake Gods', url: 'https://fakegodsbrand.store', strategy: 'shopify', tier: 'mid', priceRange: [500, 1800], threat: 'h', aesthetic: 'Irreverent graphics, dark humor, anti-establishment streetwear', drops: ['False Idols Drop', 'Dark Season', 'Sacred Drop'], currency: 'EUR' },
   { id: 'organdy', name: 'Organdy', url: 'https://organdyshop.com', strategy: 'shopify', tier: 'mid', priceRange: [600, 2000], threat: 'm', aesthetic: 'Soft femininity, organic textures, delicate layering', drops: ['Petal Collection', 'Organic Spring', 'SS25 Garden'] },
   { id: 'psych', name: 'Psych', url: 'https://psychonlinestore.com', strategy: 'shopify', tier: 'mid', priceRange: [450, 1600], threat: 'h', aesthetic: 'Psychedelic graphics, maximalist energy, underground culture', drops: ['Mind Bender Drop', 'Acid Season', 'Trip Vol.3'] },
   { id: 'kntd', name: 'Kntd', url: 'https://kntd.store', strategy: 'shopify', tier: 'mid', priceRange: [800, 2800], threat: 'm', aesthetic: 'Knitwear-focused, textured surfaces, cozy luxury, artisan craft', drops: ['Winter Knit Series', 'Textured Layers', 'Warm Season'] },
@@ -59,9 +61,9 @@ export const BRANDS: Brand[] = [
   { id: 'ordinaryproduct', name: 'Ordinary Product', url: 'https://ordinaryproduct.com', strategy: 'shopify', tier: 'mid', priceRange: [600, 2000], threat: 'm', aesthetic: 'Anti-hype philosophy, everyday objects elevated, quiet design', drops: ['Ordinary SS25', 'The Mundane Drop', 'Quiet Season'] },
   { id: 'bazic', name: 'Bazic', url: 'https://shopbazic.com', strategy: 'shopify', tier: 'mid', priceRange: [450, 1600], threat: 'h', aesthetic: 'Back to basics manifesto, essentials reimagined, stripped down', drops: ['Bazic SS25', 'Essential Drop', 'Core Season'] },
   { id: 'defacto', name: 'De Facto', url: 'https://www.defacto.com.eg', strategy: 'shopify', tier: 'budget', priceRange: [200, 800], threat: 'h', aesthetic: 'Accessible Turkish-origin fashion, broad trend coverage, high-volume basics', drops: ['SS25 New In', 'Summer Basics', 'Spring Collection'] },
-  { id: 'corteiz', name: 'Corteiz', url: 'https://www.corteiz.com', strategy: 'shopify', tier: 'premium', priceRange: [2500, 7000], threat: 'l', aesthetic: 'Premium UK street culture, exclusive drops, military-inspired, community', drops: ['Alcatraz SS25', 'Rules The World Drop', 'Global Militia'] },
-  { id: 'arte', name: 'Arte Antwerp', url: 'https://arte-antwerp.com', strategy: 'shopify', tier: 'premium', priceRange: [3500, 9000], threat: 'l', aesthetic: 'Antwerp art-school energy, creative graphics, premium European streetwear', drops: ['Antwerp Art Week', 'SS25 Gallery', 'Arte Studio'] },
-  { id: 'represent', name: 'Represent', url: 'https://representclo.com', strategy: 'shopify', tier: 'premium', priceRange: [3000, 8000], threat: 'l', aesthetic: 'Manchester premium, athletic luxury, heavyweight basics, owner mentality', drops: ['Owners Club SS25', '247 Activation', 'Premium Drop'] },
+  { id: 'corteiz', name: 'Corteiz', url: 'https://www.corteiz.com', strategy: 'shopify', tier: 'premium', priceRange: [2500, 7000], threat: 'l', aesthetic: 'Premium UK street culture, exclusive drops, military-inspired, community', drops: ['Alcatraz SS25', 'Rules The World Drop', 'Global Militia'], currency: 'GBP' },
+  { id: 'arte', name: 'Arte Antwerp', url: 'https://arte-antwerp.com', strategy: 'shopify', tier: 'premium', priceRange: [3500, 9000], threat: 'l', aesthetic: 'Antwerp art-school energy, creative graphics, premium European streetwear', drops: ['Antwerp Art Week', 'SS25 Gallery', 'Arte Studio'], currency: 'EUR' },
+  { id: 'represent', name: 'Represent', url: 'https://representclo.com', strategy: 'shopify', tier: 'premium', priceRange: [3000, 8000], threat: 'l', aesthetic: 'Manchester premium, athletic luxury, heavyweight basics, owner mentality', drops: ['Owners Club SS25', '247 Activation', 'Premium Drop'], currency: 'GBP' },
 
   // ── HTML-scraped brands ───────────────────────────────────────────────────
   {
@@ -95,6 +97,7 @@ export const BRANDS: Brand[] = [
     strategy: 'html', tier: 'premium', priceRange: [4000, 12000], threat: 'l',
     aesthetic: 'Brutalist architecture influence, utilitarian luxury, industrial codes',
     drops: ['Brutalist FW25', 'Material Studies', 'ACW Studio'],
+    currency: 'GBP',
     selectors: {
       productList: '.product-item, [class*="product-card"]',
       name: '.product-item__title, h2, h3',
@@ -108,6 +111,7 @@ export const BRANDS: Brand[] = [
     strategy: 'html', tier: 'mid', priceRange: [800, 3500], threat: 'm',
     aesthetic: 'Eclectic vintage-inspired, thrift culture, indie aesthetics, Gen-Z lifestyle',
     drops: ['Festival Season', 'UO Vintage', 'Summer Collective'],
+    currency: 'USD',
     selectors: {
       productList: '[class*="ProductTile"]',
       name: '[class*="ProductTile-description"] p',

@@ -6,8 +6,8 @@ const BRANDS_KEY = 'iys:custom_brands'
 const META_KEY = 'iys:meta'
 
 function getClient(): Redis {
-  const url = process.env.REDIS_URL
-  if (!url) throw new Error('REDIS_URL environment variable is not set')
+  const url = process.env.KV_URL || process.env.REDIS_URL
+  if (!url) throw new Error('KV_URL or REDIS_URL environment variable is not set')
   const useTLS = url.startsWith('rediss://')
   return new Redis(url, {
     ...(useTLS ? { tls: { rejectUnauthorized: false } } : {}),
@@ -95,6 +95,7 @@ export interface CustomBrand {
   strategy: 'shopify' | 'html'
   tier: 'budget' | 'mid' | 'premium'
   threat: 'h' | 'm' | 'l'
+  currency?: string
   addedAt: string
 }
 
