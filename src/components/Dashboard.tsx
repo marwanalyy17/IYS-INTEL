@@ -5,7 +5,7 @@ import { ScrapedProduct } from '@/lib/scraper'
 import { expandQuery, scoreProduct, IYS_QUICK_TAGS } from '@/lib/synonyms'
 import { BRANDS } from '@/lib/brands'
 import { convertToEGP } from '@/lib/currency'
-import ProductTable from './ProductTable'
+import ProductTable, { IYS_BENCHMARKS } from './ProductTable'
 import ProductGrid from './ProductGrid'
 import BrandPanel from './BrandPanel'
 import AddBrandModal from './AddBrandModal'
@@ -135,6 +135,35 @@ export default function Dashboard() {
     ? new Date(meta.lastScraped).toLocaleString('en-EG', { dateStyle: 'medium', timeStyle: 'short' })
     : 'Never'
 
+  // Dynamic Average Calculations
+  let iysAvgText = "N/A"
+  let compAvgText = "N/A"
+
+  if (filtered.length > 0) {
+    let totalComp = 0
+    let validComp = 0
+    let totalIys = 0
+    let validIys = 0
+
+    filtered.forEach(p => {
+      const brandCurrency = BRANDS.find(b => b.id === p.brandId)?.currency || p.currency || 'EGP'
+      const egpPrice = convertToEGP(p.price ?? 0, brandCurrency)
+      if (egpPrice > 0) {
+        totalComp += egpPrice
+        validComp++
+      }
+
+      const bench = IYS_BENCHMARKS[p.category]
+      if (bench && bench.price > 0) {
+        totalIys += bench.price
+        validIys++
+      }
+    })
+
+    if (validComp > 0) compAvgText = Math.round(totalComp / validComp).toLocaleString() + " EGP"
+    if (validIys > 0) iysAvgText = Math.round(totalIys / validIys).toLocaleString() + " EGP"
+  }
+
   return (
     <div className="flex flex-col h-screen bg-bg text-white overflow-hidden">
 
@@ -158,9 +187,9 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-full border border-success/30 bg-success/10 text-success whitespace-nowrap">
-          <span className="font-medium">IYS</span>
-          <span className="text-success/60">·</span>
-          <span>399–1,799 EGP</span>
+          <span className="font-medium">Avg Price: IYS {iysAvgText}</span>
+          <span className="text-success/60">vs</span>
+          <span>Competitors {compAvgText}</span>
         </div>
 
         <button

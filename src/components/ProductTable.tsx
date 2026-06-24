@@ -9,7 +9,7 @@ import { BRANDS } from '@/lib/brands'
 
 interface Props { products: ScrapedProduct[]; showEGP?: boolean }
 
-const IYS_BENCHMARKS: Record<string, { price: number; label: string }> = {
+export const IYS_BENCHMARKS: Record<string, { price: number; label: string }> = {
   'cargo pants':  { price: 1499, label: 'IYS Pants' },
   'pants':        { price: 1399, label: 'IYS Pants' },
   't-shirt':      { price: 1099, label: 'IYS T-Shirts' },
@@ -112,6 +112,9 @@ export default function ProductTable({ products, showEGP }: Props) {
                   {p.category && (
                     <span className="text-[10px] text-white/25 border border-white/[0.07] px-1.5 py-0.5 rounded-full ml-0 mt-0.5 inline-block">{p.category}</span>
                   )}
+                  {p.colors && p.colors.length > 0 && (
+                    <span className="text-[10px] text-white/40 block mt-1 truncate">Colors: {p.colors.join(', ')}</span>
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   <div className={`font-semibold ${priceTierClass(p.tier)}`}>
@@ -186,6 +189,12 @@ export default function ProductTable({ products, showEGP }: Props) {
                           <div>
                             <div className="text-[9px] text-white/30 uppercase tracking-widest mb-0.5">Category</div>
                             <div className="text-[12px] text-white/60">{p.category}</div>
+                          </div>
+                        )}
+                        {p.colors && p.colors.length > 0 && (
+                          <div>
+                            <div className="text-[9px] text-white/30 uppercase tracking-widest mb-0.5">Colors Available</div>
+                            <div className="text-[12px] text-white/60">{p.colors.join(', ')}</div>
                           </div>
                         )}
                         {vs && (

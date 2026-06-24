@@ -53,6 +53,9 @@ export default function ProductGrid({ products, showEGP }: Props) {
           <div className="p-2.5">
             <div className="text-[10px] text-white/30 font-medium uppercase tracking-widest mb-1 truncate">{p.brandName}</div>
             <div className="text-[12px] text-white/80 leading-tight mb-1.5 line-clamp-2">{p.name}</div>
+            {p.colors && p.colors.length > 0 && (
+              <div className="text-[10px] text-white/50 mb-1.5 truncate">Colors: {p.colors.join(', ')}</div>
+            )}
             {p.category && (
               <div className="text-[10px] text-white/25 border border-white/[0.07] px-1.5 py-0.5 rounded-full inline-block mb-2">{p.category}</div>
             )}

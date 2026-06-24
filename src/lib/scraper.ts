@@ -17,6 +17,7 @@ export interface ScrapedProduct {
   imageUrl: string
   category: string
   tags: string[]
+  colors?: string[]
   scrapedAt: string
 }
 
@@ -116,6 +117,14 @@ export async function scrapeShopify(brand: Brand): Promise<ScrapedProduct[]> {
         const imageUrl = formatShopifyImage(p.images?.[0]?.src ?? '')
         const handle = p.handle ?? ''
 
+        let colors: string[] = []
+        if (Array.isArray(p.options)) {
+          const colorOpt = p.options.find((o: any) => o.name?.toLowerCase().includes('color') || o.name?.toLowerCase() === 'colour')
+          if (colorOpt && Array.isArray(colorOpt.values)) {
+            colors = colorOpt.values
+          }
+        }
+
         products.push({
           id: `${brand.id}-${p.id}`,
           brandId: brand.id,
@@ -131,6 +140,7 @@ export async function scrapeShopify(brand: Brand): Promise<ScrapedProduct[]> {
           imageUrl,
           category: (p.product_type ?? '').trim(),
           tags: p.tags ?? [],
+          colors: colors.length > 0 ? colors : undefined,
           scrapedAt: new Date().toISOString(),
         })
       }
@@ -219,6 +229,7 @@ export async function scrapeHtml(brand: Brand): Promise<ScrapedProduct[]> {
         imageUrl: imgSrc,
         category: guessCategory(name),
         tags: [],
+        colors: undefined,
         scrapedAt: new Date().toISOString(),
       })
     })
