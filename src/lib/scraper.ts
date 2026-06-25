@@ -31,13 +31,19 @@ const KNOWN_CURRENCIES = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'KWD', 'EGP']
 
 // ── Known color names for title parsing ────────────────────────────────────────
 const KNOWN_COLORS = [
-  'black', 'white', 'off white', 'off-white', 'charcoal', 'grey', 'gray',
-  'light grey', 'light gray', 'dark grey', 'dark gray', 'heather gray',
-  'heather grey', 'olive', 'khaki', 'navy', 'navy blue', 'blue', 'light blue',
-  'sky blue', 'royal blue', 'red', 'maroon', 'burgundy', 'green', 'forest green',
-  'sage', 'army green', 'military green', 'brown', 'tan', 'beige', 'sand',
-  'camel', 'pink', 'purple', 'lavender', 'yellow', 'orange', 'cream', 'ivory',
-  'mustard', 'teal', 'mint', 'coral', 'rust', 'stone', 'ecru', 'natural',
+  // Multi-word first (longer matches take priority)
+  'off white', 'off-white', 'light grey', 'light gray', 'dark grey', 'dark gray',
+  'heather gray', 'heather grey', 'sky blue', 'royal blue', 'navy blue',
+  'forest green', 'army green', 'military green', 'dirty vintage', 'washed black',
+  'washed grey', 'washed blue', 'vintage blue', 'vintage black', 'vintage grey',
+  // Single words
+  'black', 'white', 'charcoal', 'grey', 'gray', 'olive', 'khaki', 'navy',
+  'blue', 'red', 'maroon', 'burgundy', 'green', 'brown', 'tan', 'beige',
+  'sand', 'camel', 'pink', 'purple', 'lavender', 'yellow', 'orange', 'cream',
+  'ivory', 'mustard', 'teal', 'mint', 'coral', 'rust', 'stone', 'ecru',
+  'natural', 'mushroom', 'mocha', 'latte', 'clay', 'sage', 'denim', 'indigo',
+  'cobalt', 'slate', 'taupe', 'sienna', 'copper', 'gold', 'silver', 'bone',
+  'birch', 'wheat', 'fog', 'smoke', 'ash', 'onyx',
 ]
 
 // Extracts colors embedded in a product title (e.g. "Track Pant - Black/Charcoal")
@@ -47,10 +53,17 @@ function extractColorsFromTitle(title: string): string[] {
 
   // Sort by length descending so multi-word colors (e.g. "heather gray") match before single words
   const sorted = [...KNOWN_COLORS].sort((a, b) => b.length - a.length)
+
   for (const color of sorted) {
-    if (lower.includes(color) && !found.some(f => f.toLowerCase() === color)) {
-      // Capitalize first letter of each word
-      found.push(color.replace(/\b\w/g, c => c.toUpperCase()))
+    if (lower.includes(color)) {
+      const normalized = color.toLowerCase()
+      // Skip if this color is a substring of an already-found color (e.g. skip "blue" if "sky blue" already found)
+      const alreadyCovered = found.some(f => f.toLowerCase().includes(normalized))
+      // Skip if an already-found color is a substring of this one (shouldn't happen with desc sort, but safety check)
+      const isDuplicate = found.some(f => f.toLowerCase() === normalized)
+      if (!alreadyCovered && !isDuplicate) {
+        found.push(color.replace(/\b\w/g, c => c.toUpperCase()))
+      }
     }
   }
   return found
