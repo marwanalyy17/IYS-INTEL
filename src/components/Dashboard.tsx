@@ -12,7 +12,7 @@ import AddBrandModal from './AddBrandModal'
 import ExportButton from './ExportButton'
 import {
   Search, LayoutGrid, Table2, Building2, Plus,
-  RefreshCw, Wifi, WifiOff, ChevronDown
+  RefreshCw, Wifi, WifiOff, ChevronDown, X
 } from 'lucide-react'
 
 interface Meta {
@@ -40,7 +40,11 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [scraping, setScraping] = useState(false)
   const [error, setError] = useState('')
+  const [brandFilter, setBrandFilter] = useState('')
+  const [brandDropdownOpen, setBrandDropdownOpen] = useState(false)
+  const [brandSearch, setBrandSearch] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
+  const brandDropdownRef = useRef<HTMLDivElement>(null)
 
   // ── Load products ──────────────────────────────────────────────────────────
   const loadProducts = useCallback(async () => {
@@ -100,6 +104,11 @@ export default function Dashboard() {
         .sort((a, b) => (b._score ?? 0) - (a._score ?? 0))
     }
 
+    // Apply brand filter
+    if (brandFilter) {
+      result = result.filter(p => p.brandId === brandFilter)
+    }
+
     // Apply sort (after relevance)
     const getEgpPrice = (p: ScrapedProduct) => {
       const cur = BRANDS.find(b => b.id === p.brandId)?.currency || p.currency || 'EGP'
@@ -115,7 +124,7 @@ export default function Dashboard() {
 
     setFiltered(result)
     setVisibleCount(100) // Reset visible count on new search/sort
-  }, [products, debouncedQuery, sort])
+  }, [products, debouncedQuery, sort, brandFilter])
 
   const displayedProducts = filtered.slice(0, visibleCount)
 
@@ -131,6 +140,29 @@ export default function Dashboard() {
   }
 
   const brandCount = new Set(filtered.map(p => p.brandId)).size
+
+  // Build unique brand list from loaded products for the dropdown
+  const availableBrands = Array.from(
+    new Map(products.map(p => [p.brandId, p.brandName])).entries()
+  ).sort((a, b) => a[1].localeCompare(b[1]))
+
+  const filteredBrandList = brandSearch
+    ? availableBrands.filter(([, name]) => name.toLowerCase().includes(brandSearch.toLowerCase()))
+    : availableBrands
+
+  const activeBrandName = availableBrands.find(([id]) => id === brandFilter)?.[1] ?? ''
+
+  // Close brand dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (brandDropdownRef.current && !brandDropdownRef.current.contains(e.target as Node)) {
+        setBrandDropdownOpen(false)
+        setBrandSearch('')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
   const lastScrapedLabel = meta.lastScraped
     ? new Date(meta.lastScraped).toLocaleString('en-EG', { dateStyle: 'medium', timeStyle: 'short' })
     : 'Never'
@@ -274,6 +306,67 @@ export default function Dashboard() {
               <option value="brand">Brand A–Z</option>
               <option value="threat">Threat level</option>
             </select>
+
+            {/* Brand Filter Dropdown */}
+            <div ref={brandDropdownRef} className="relative">
+              <button
+                onClick={() => { setBrandDropdownOpen(v => !v); setBrandSearch('') }}
+                className={`flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border transition-colors ${
+                  brandFilter
+                    ? 'bg-accent/10 text-info border-accent/40'
+                    : 'border-white/[0.13] text-white/70 hover:bg-white/[0.07]'
+                }`}
+              >
+                <Building2 size={11} />
+                {brandFilter ? activeBrandName : 'All Brands'}
+                {brandFilter ? (
+                  <X size={11} className="ml-1 hover:text-white" onClick={e => { e.stopPropagation(); setBrandFilter(''); setBrandDropdownOpen(false) }} />
+                ) : (
+                  <ChevronDown size={11} />
+                )}
+              </button>
+
+              {brandDropdownOpen && (
+                <div className="absolute top-full mt-1 left-0 w-52 bg-surface border border-white/[0.13] rounded-lg shadow-xl z-50 overflow-hidden">
+                  <div className="p-1.5 border-b border-white/[0.07]">
+                    <input
+                      type="text"
+                      value={brandSearch}
+                      onChange={e => setBrandSearch(e.target.value)}
+                      placeholder="Search brands..."
+                      autoFocus
+                      className="w-full px-2 py-1 text-[11px] bg-surface2 border border-white/[0.13] rounded-md text-white placeholder-white/30 outline-none focus:border-accent transition-colors"
+                    />
+                  </div>
+                  <div className="max-h-52 overflow-y-auto">
+                    {!brandSearch && (
+                      <button
+                        onClick={() => { setBrandFilter(''); setBrandDropdownOpen(false); setBrandSearch('') }}
+                        className={`w-full text-left px-3 py-1.5 text-[11px] transition-colors ${
+                          !brandFilter ? 'bg-accent/10 text-info' : 'text-white/60 hover:bg-white/[0.05] hover:text-white'
+                        }`}
+                      >
+                        All Brands
+                      </button>
+                    )}
+                    {filteredBrandList.map(([id, name]) => (
+                      <button
+                        key={id}
+                        onClick={() => { setBrandFilter(id); setBrandDropdownOpen(false); setBrandSearch('') }}
+                        className={`w-full text-left px-3 py-1.5 text-[11px] transition-colors ${
+                          brandFilter === id ? 'bg-accent/10 text-info' : 'text-white/60 hover:bg-white/[0.05] hover:text-white'
+                        }`}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                    {filteredBrandList.length === 0 && (
+                      <div className="px-3 py-2 text-[10px] text-white/30">No brands found</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="flex gap-1">
               <label className="flex items-center gap-1.5 mr-2 text-[11px] text-white/60 cursor-pointer hover:text-white transition-colors">
