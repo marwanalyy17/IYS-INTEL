@@ -29,6 +29,33 @@ const HEADERS = {
 
 const KNOWN_CURRENCIES = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'KWD', 'EGP']
 
+// ── Known color names for title parsing ────────────────────────────────────────
+const KNOWN_COLORS = [
+  'black', 'white', 'off white', 'off-white', 'charcoal', 'grey', 'gray',
+  'light grey', 'light gray', 'dark grey', 'dark gray', 'heather gray',
+  'heather grey', 'olive', 'khaki', 'navy', 'navy blue', 'blue', 'light blue',
+  'sky blue', 'royal blue', 'red', 'maroon', 'burgundy', 'green', 'forest green',
+  'sage', 'army green', 'military green', 'brown', 'tan', 'beige', 'sand',
+  'camel', 'pink', 'purple', 'lavender', 'yellow', 'orange', 'cream', 'ivory',
+  'mustard', 'teal', 'mint', 'coral', 'rust', 'stone', 'ecru', 'natural',
+]
+
+// Extracts colors embedded in a product title (e.g. "Track Pant - Black/Charcoal")
+function extractColorsFromTitle(title: string): string[] {
+  const lower = title.toLowerCase()
+  const found: string[] = []
+
+  // Sort by length descending so multi-word colors (e.g. "heather gray") match before single words
+  const sorted = [...KNOWN_COLORS].sort((a, b) => b.length - a.length)
+  for (const color of sorted) {
+    if (lower.includes(color) && !found.some(f => f.toLowerCase() === color)) {
+      // Capitalize first letter of each word
+      found.push(color.replace(/\b\w/g, c => c.toUpperCase()))
+    }
+  }
+  return found
+}
+
 // ── Auto-detect Shopify store currency from homepage HTML ──────────────────────
 
 async function detectShopifyCurrency(baseUrl: string): Promise<string | null> {
@@ -118,11 +145,16 @@ export async function scrapeShopify(brand: Brand): Promise<ScrapedProduct[]> {
         const handle = p.handle ?? ''
 
         let colors: string[] = []
+        // First try Shopify options (some stores use "Color" option)
         if (Array.isArray(p.options)) {
           const colorOpt = p.options.find((o: any) => o.name?.toLowerCase().includes('color') || o.name?.toLowerCase() === 'colour')
           if (colorOpt && Array.isArray(colorOpt.values)) {
             colors = colorOpt.values
           }
+        }
+        // Fallback: extract colors from the product title itself
+        if (colors.length === 0) {
+          colors = extractColorsFromTitle(p.title ?? '')
         }
 
         products.push({
@@ -229,7 +261,7 @@ export async function scrapeHtml(brand: Brand): Promise<ScrapedProduct[]> {
         imageUrl: imgSrc,
         category: guessCategory(name),
         tags: [],
-        colors: undefined,
+        colors: extractColorsFromTitle(name),
         scrapedAt: new Date().toISOString(),
       })
     })
