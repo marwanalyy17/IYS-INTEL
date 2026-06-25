@@ -3,6 +3,7 @@
 import { ScrapedProduct } from '@/lib/scraper'
 import { ExternalLink } from 'lucide-react'
 import { convertToEGP, formatCurrency } from '@/lib/currency'
+import { getColorHex } from '@/lib/colors'
 import { BRANDS } from '@/lib/brands'
 
 interface Props { products: ScrapedProduct[]; showEGP?: boolean }
@@ -54,7 +55,19 @@ export default function ProductGrid({ products, showEGP }: Props) {
             <div className="text-[10px] text-white/30 font-medium uppercase tracking-widest mb-1 truncate">{p.brandName}</div>
             <div className="text-[12px] text-white/80 leading-tight mb-1.5 line-clamp-2">{p.name}</div>
             {p.colors && p.colors.length > 0 && (
-              <div className="text-[10px] text-white/50 mb-1.5 truncate">Colors: {p.colors.join(', ')}</div>
+              <div className="flex items-center gap-1 mb-1.5 overflow-x-auto no-scrollbar">
+                {p.colors.map((colorName, idx) => (
+                  <div 
+                    key={idx} 
+                    title={colorName}
+                    className="w-2.5 h-2.5 rounded-full border border-white/20 shadow-sm flex-shrink-0"
+                    style={{ backgroundColor: getColorHex(colorName) }}
+                  />
+                ))}
+                {p.colors.length > 5 && (
+                  <span className="text-[9px] text-white/30 ml-0.5">+{p.colors.length - 5}</span>
+                )}
+              </div>
             )}
             {p.category && (
               <div className="text-[10px] text-white/25 border border-white/[0.07] px-1.5 py-0.5 rounded-full inline-block mb-2">{p.category}</div>

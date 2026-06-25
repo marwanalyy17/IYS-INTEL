@@ -1,0 +1,41 @@
+export const COLOR_MAP: Record<string, string> = {
+  'black': '#000000',
+  'white': '#FFFFFF',
+  'off white': '#FAF9F6',
+  'off-white': '#FAF9F6',
+  'charcoal': '#36454F',
+  'grey': '#808080',
+  'gray': '#808080',
+  'light grey': '#D3D3D3',
+  'light gray': '#D3D3D3',
+  'dark grey': '#A9A9A9',
+  'dark gray': '#A9A9A9',
+  'olive': '#556B2F',
+  'khaki': '#C3B091',
+  'navy': '#000080',
+  'navy blue': '#000080',
+  'blue': '#0000FF',
+  'light blue': '#ADD8E6',
+  'red': '#FF0000',
+  'maroon': '#800000',
+  'burgundy': '#800020',
+  'green': '#008000',
+  'forest green': '#228B22',
+  'brown': '#A52A2A',
+  'tan': '#D2B48C',
+  'beige': '#F5F5DC',
+  'sand': '#C2B280',
+  'pink': '#FFC0CB',
+  'purple': '#800080',
+  'yellow': '#FFFF00',
+  'orange': '#FFA500',
+  'cream': '#FFFDD0',
+  'mustard': '#FFDB58',
+  'teal': '#008080',
+  'sage': '#9DC183',
+}
+
+export function getColorHex(colorName: string): string {
+  const key = colorName.toLowerCase().trim()
+  return COLOR_MAP[key] || '#888888' // Default fallback color if unknown
+}

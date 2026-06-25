@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
 import { convertToEGP, formatCurrency } from '@/lib/currency'
+import { getColorHex } from '@/lib/colors'
 import { ScrapedProduct } from '@/lib/scraper'
 import { BRANDS } from '@/lib/brands'
 
@@ -113,7 +114,19 @@ export default function ProductTable({ products, showEGP }: Props) {
                     <span className="text-[10px] text-white/25 border border-white/[0.07] px-1.5 py-0.5 rounded-full ml-0 mt-0.5 inline-block">{p.category}</span>
                   )}
                   {p.colors && p.colors.length > 0 && (
-                    <span className="text-[10px] text-white/40 block mt-1 truncate">Colors: {p.colors.join(', ')}</span>
+                    <div className="flex items-center gap-1 mt-1.5 overflow-x-auto no-scrollbar">
+                      {p.colors.map((colorName, idx) => (
+                        <div 
+                          key={idx} 
+                          title={colorName}
+                          className="w-2.5 h-2.5 rounded-full border border-white/20 shadow-sm flex-shrink-0"
+                          style={{ backgroundColor: getColorHex(colorName) }}
+                        />
+                      ))}
+                      {p.colors.length > 5 && (
+                        <span className="text-[9px] text-white/30 ml-0.5">+{p.colors.length - 5}</span>
+                      )}
+                    </div>
                   )}
                 </td>
                 <td className="px-3 py-2">
@@ -193,8 +206,18 @@ export default function ProductTable({ products, showEGP }: Props) {
                         )}
                         {p.colors && p.colors.length > 0 && (
                           <div>
-                            <div className="text-[9px] text-white/30 uppercase tracking-widest mb-0.5">Colors Available</div>
-                            <div className="text-[12px] text-white/60">{p.colors.join(', ')}</div>
+                            <div className="text-[9px] text-white/30 uppercase tracking-widest mb-1.5">Colors Available</div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {p.colors.map((colorName, idx) => (
+                                <div key={idx} className="flex items-center gap-1.5 bg-white/[0.03] border border-white/[0.07] rounded-full pl-1.5 pr-2.5 py-0.5">
+                                  <div 
+                                    className="w-2.5 h-2.5 rounded-full border border-white/20 shadow-sm"
+                                    style={{ backgroundColor: getColorHex(colorName) }}
+                                  />
+                                  <span className="text-[10px] text-white/60">{colorName}</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                         {vs && (
