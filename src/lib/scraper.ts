@@ -154,8 +154,16 @@ export async function scrapeShopify(brand: Brand): Promise<ScrapedProduct[]> {
 
       for (const p of data.products) {
         const variant = p.variants?.[0] ?? {}
-        const rawPrice = parseFloat(variant.price ?? '0')
-        const compareAtPrice = parseFloat(variant.compare_at_price ?? '0')
+        let rawPrice = parseFloat(variant.price ?? '0')
+        let compareAtPrice = parseFloat(variant.compare_at_price ?? '0')
+
+        // Temporary workaround: Vercel is deployed in a region (e.g. UK) where Shopify Markets 
+        // applies a 20% VAT to the base Egyptian price for this store in products.json.
+        // We strip the VAT back out.
+        if (brand.id === 'nina_the_brand') {
+          if (rawPrice > 0) rawPrice = Math.round((rawPrice / 1.2) * 100) / 100
+          if (compareAtPrice > 0) compareAtPrice = Math.round((compareAtPrice / 1.2) * 100) / 100
+        }
         const imageUrl = formatShopifyImage(p.images?.[0]?.src ?? '')
         const handle = p.handle ?? ''
 
