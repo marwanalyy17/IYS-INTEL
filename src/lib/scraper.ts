@@ -143,7 +143,7 @@ export async function scrapeShopify(brand: Brand): Promise<ScrapedProduct[]> {
 
   while (true) {
     try {
-      const url = `${base}/products.json?limit=250&page=${page}`
+      const url = `${base}/products.json?limit=250&page=${page}&country=EG`
       const { data, status } = await axios.get(url, {
         headers: HEADERS,
         timeout: 15000,
