@@ -25,6 +25,8 @@ const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'Accept': 'application/json, text/html, */*',
   'Accept-Language': 'en-US,en;q=0.9',
+  'X-Forwarded-For': '156.205.0.1', // Egyptian IP (Telecom Egypt)
+  'Cookie': 'localization=EG; cart_currency=EGP',
 }
 
 const KNOWN_CURRENCIES = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'KWD', 'EGP']
