@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { BRANDS } from '@/lib/brands'
 import { getCustomBrands } from '@/lib/storage'
 import { scrapeBrand } from '@/lib/scraper'
-import { saveAllProducts } from '@/lib/storage'
+import { saveAllProducts, appendPriceHistory } from '@/lib/storage'
 import { ScrapedProduct } from '@/lib/scraper'
 import { Brand } from '@/lib/brands'
 
@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
   }
 
   await saveAllProducts(allProducts)
+  await appendPriceHistory(allProducts)
 
   return NextResponse.json({
     success: true,

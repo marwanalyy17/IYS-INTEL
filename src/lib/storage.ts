@@ -69,6 +69,84 @@ export async function upsertBrandProducts(brandId: string, newProducts: ScrapedP
   await saveAllProducts([...others, ...newProducts])
 }
 
+// ── Price History ───────────────────────────────────────────────────────────────
+
+export interface PriceHistoryEntry {
+  date: string
+  price: number
+  priceChanged: boolean
+  priceDelta: number
+}
+
+export async function appendPriceHistory(products: ScrapedProduct[]): Promise<void> {
+  if (!products.length) return
+
+  await withRedis(async client => {
+    const getPipeline = client.pipeline()
+    const keys = products.map(p => `iys:history:${p.brandId}:${p.id}`)
+    
+    keys.forEach(key => getPipeline.get(key))
+    const results = await getPipeline.exec()
+    
+    const setPipeline = client.pipeline()
+    
+    products.forEach((p, idx) => {
+      const key = keys[idx]
+      const res = results?.[idx]?.[1] as string | null
+      let history: PriceHistoryEntry[] = []
+      
+      if (res) {
+        try { history = JSON.parse(res) } catch {}
+      }
+      
+      const lastEntry = history.length > 0 ? history[history.length - 1] : null
+      const priceDelta = lastEntry ? p.price - lastEntry.price : 0
+      const priceChanged = priceDelta !== 0
+      
+      history.push({
+        date: p.scrapedAt,
+        price: p.price,
+        priceChanged,
+        priceDelta
+      })
+      
+      if (history.length > 365) {
+        history = history.slice(-365)
+      }
+      
+      setPipeline.set(key, JSON.stringify(history))
+    })
+    
+    await setPipeline.exec()
+  })
+}
+
+export async function getBrandPriceHistory(brandId: string) {
+  const allProducts = await getProductsByBrand(brandId)
+  if (!allProducts.length) return []
+  
+  return withRedis(async client => {
+    const pipeline = client.pipeline()
+    const keys = allProducts.map(p => `iys:history:${p.brandId}:${p.id}`)
+    keys.forEach(k => pipeline.get(k))
+    
+    const results = await pipeline.exec()
+    
+    return allProducts.map((p, idx) => {
+      const res = results?.[idx]?.[1] as string | null
+      let history: PriceHistoryEntry[] = []
+      if (res) {
+        try { history = JSON.parse(res) } catch {}
+      }
+      return {
+        productId: p.id,
+        productName: p.name,
+        history
+      }
+    })
+  })
+}
+
 // ── Scrape metadata ───────────────────────────────────────────────────────────
 
 export interface ScrapeMeta {
