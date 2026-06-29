@@ -46,8 +46,8 @@ export async function POST(req: NextRequest) {
     const products = await scrapeBrand(brand)
 
     // Calculate dynamic tier and threat based on scraped products
-    let tier = 'mid'
-    let threat = 'm'
+    let tier: 'budget' | 'mid' | 'premium' = 'mid'
+    let threat: 'h' | 'm' | 'l' = 'm'
 
     if (products.length > 0) {
       // Calculate Average Price in EGP
