@@ -1,6 +1,8 @@
 import axios from 'axios'
 import * as cheerio from 'cheerio'
 import { Brand, BrandSelectors } from './brands'
+import { convertToEGP } from './currency'
+import { calculateProductThreat } from './benchmarks'
 
 export interface ScrapedProduct {
   id: string
@@ -298,8 +300,16 @@ export async function scrapeHtml(brand: Brand): Promise<ScrapedProduct[]> {
 // ── Scrape a single brand (auto-detects strategy) ─────────────────────────────
 
 export async function scrapeBrand(brand: Brand): Promise<ScrapedProduct[]> {
-  if (brand.strategy === 'shopify') return scrapeShopify(brand)
-  return scrapeHtml(brand)
+  const products = brand.strategy === 'shopify' ? await scrapeShopify(brand) : await scrapeHtml(brand)
+  
+  // Recalculate dynamic threat per product based on category benchmarks
+  for (const p of products) {
+    const brandCurrency = brand.currency || p.currency || 'EGP'
+    const priceEGP = convertToEGP(p.price, brandCurrency)
+    p.threat = calculateProductThreat(p.category, priceEGP)
+  }
+
+  return products
 }
 
 // ── Auto-detect if a URL is Shopify ──────────────────────────────────────────

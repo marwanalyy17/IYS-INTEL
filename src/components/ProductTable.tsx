@@ -7,26 +7,10 @@ import { convertToEGP, formatCurrency } from '@/lib/currency'
 import { getColorHex } from '@/lib/colors'
 import { ScrapedProduct } from '@/lib/scraper'
 import { BRANDS } from '@/lib/brands'
+import { IYS_BENCHMARKS } from '@/lib/benchmarks'
 import PriceHistoryModal from './PriceHistoryModal'
 
 interface Props { products: ScrapedProduct[]; showEGP?: boolean }
-
-export const IYS_BENCHMARKS: Record<string, { price: number; label: string }> = {
-  'cargo pants':  { price: 1499, label: 'IYS Pants' },
-  'pants':        { price: 1399, label: 'IYS Pants' },
-  't-shirt':      { price: 1099, label: 'IYS T-Shirts' },
-  'jersey':       { price: 1099, label: 'IYS Jerseys' },
-  'linen':        { price: 1699, label: 'IYS Linens' },
-  'hoodie':       { price: 1199, label: 'IYS Hoodies' },
-  'knitwear':     { price: 1799, label: 'IYS Knitwear' },
-  'shorts':       { price: 699,  label: 'IYS Shorts' },
-  'joggers':      { price: 999,  label: 'IYS Swants' },
-  'sweatshirt':   { price: 1199, label: 'IYS Crewnecks' },
-  'jacket':       { price: 1499, label: 'IYS Jackets' },
-  'pjoys':        { price: 799,  label: 'IYS Pjoys' },
-  'pshorts':      { price: 599,  label: 'IYS Pshorts' },
-  'accessories':  { price: 299,  label: 'IYS Accessories' },
-}
 
 function getVsIYS(price: number, category: string) {
   const bench = IYS_BENCHMARKS[category]

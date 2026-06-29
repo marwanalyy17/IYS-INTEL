@@ -75,8 +75,8 @@ export async function POST(req: NextRequest) {
       else threat = 'l'
     }
 
-    // Update the scraped products with the inferred tier and threat
-    const updatedProducts = products.map(p => ({ ...p, tier, threat }))
+    // Update the scraped products with the inferred tier
+    const updatedProducts = products.map(p => ({ ...p, tier }))
 
     // Persist custom brand config with inferred data
     await addCustomBrand({

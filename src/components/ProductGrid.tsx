@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { ScrapedProduct } from '@/lib/scraper'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, LineChart } from 'lucide-react'
+import PriceHistoryModal from './PriceHistoryModal'
 import { convertToEGP, formatCurrency } from '@/lib/currency'
 import { getColorHex } from '@/lib/colors'
 import { BRANDS } from '@/lib/brands'
@@ -15,7 +17,10 @@ function priceTierClass(tier: string) {
 }
 
 export default function ProductGrid({ products, showEGP }: Props) {
+  const [historyProduct, setHistoryProduct] = useState<ScrapedProduct | null>(null)
+
   return (
+    <>
     <div className="p-4 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))' }}>
       {products.map(p => {
         // Always use the brand config currency as source of truth.
@@ -82,18 +87,34 @@ export default function ProductGrid({ products, showEGP }: Props) {
                 </div>
               )}
             </div>
-            <a
-              href={p.productUrl || p.brandUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md border border-white/[0.13] text-white/40 hover:bg-accent/10 hover:text-info hover:border-accent/30 transition-colors"
-            >
-              <ExternalLink size={10} /> Inspect
-            </a>
+            <div className="flex gap-2">
+              <a
+                href={p.productUrl || p.brandUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md border border-white/[0.13] text-white/40 hover:bg-accent/10 hover:text-info hover:border-accent/30 transition-colors flex-1 justify-center"
+              >
+                <ExternalLink size={10} /> Inspect
+              </a>
+              <button
+                onClick={() => setHistoryProduct(p)}
+                className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md border border-white/[0.13] bg-white/[0.03] text-white/60 hover:bg-accent/20 hover:text-accent hover:border-accent/50 transition-colors flex-1 justify-center"
+              >
+                <LineChart size={10} /> History
+              </button>
+            </div>
           </div>
         </div>
         )
       })}
     </div>
+    
+    {historyProduct && (
+      <PriceHistoryModal
+        product={historyProduct}
+        onClose={() => setHistoryProduct(null)}
+      />
+    )}
+    </>
   )
 }
