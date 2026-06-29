@@ -11,8 +11,6 @@ interface Props {
 export default function AddBrandModal({ onClose, onAdded }: Props) {
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
-  const [tier, setTier] = useState('mid')
-  const [threat, setThreat] = useState('m')
   const [currency, setCurrency] = useState('EGP')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -32,7 +30,7 @@ export default function AddBrandModal({ onClose, onAdded }: Props) {
       const res = await fetch('/api/scrape-brand', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), url: formattedUrl, tier, threat, currency }),
+        body: JSON.stringify({ name: name.trim(), url: formattedUrl, currency }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Failed')
@@ -82,46 +80,20 @@ export default function AddBrandModal({ onClose, onAdded }: Props) {
             <p className="text-[10px] text-white/25 mt-1">For Shopify stores, paste the base URL. For non-Shopify, paste the collection/catalog page URL.</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-[10px] text-white/40 uppercase tracking-widest block mb-1">Price tier</label>
-              <select
-                value={tier}
-                onChange={e => setTier(e.target.value)}
-                className="w-full px-3 py-2 text-[12px] bg-surface2 border border-white/[0.13] rounded-md text-white outline-none cursor-pointer"
-              >
-                <option value="budget">Budget (&lt;800 EGP)</option>
-                <option value="mid">Mid (800–2,500 EGP)</option>
-                <option value="premium">Premium (&gt;2,500 EGP)</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] text-white/40 uppercase tracking-widest block mb-1">IYS threat level</label>
-              <select
-                value={threat}
-                onChange={e => setThreat(e.target.value)}
-                className="w-full px-3 py-2 text-[12px] bg-surface2 border border-white/[0.13] rounded-md text-white outline-none cursor-pointer"
-              >
-                <option value="h">Direct threat</option>
-                <option value="m">Adjacent</option>
-                <option value="l">Low overlap</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] text-white/40 uppercase tracking-widest block mb-1">Currency</label>
-              <select
-                value={currency}
-                onChange={e => setCurrency(e.target.value)}
-                className="w-full px-3 py-2 text-[12px] bg-surface2 border border-white/[0.13] rounded-md text-white outline-none cursor-pointer"
-              >
-                <option value="EGP">EGP (£)</option>
-                <option value="USD">USD ($)</option>
-                <option value="EUR">EUR (€)</option>
-                <option value="GBP">GBP (£)</option>
-                <option value="AED">AED</option>
-                <option value="SAR">SAR</option>
-              </select>
-            </div>
+          <div>
+            <label className="text-[10px] text-white/40 uppercase tracking-widest block mb-1">Currency</label>
+            <select
+              value={currency}
+              onChange={e => setCurrency(e.target.value)}
+              className="w-full px-3 py-2 text-[12px] bg-surface2 border border-white/[0.13] rounded-md text-white outline-none cursor-pointer"
+            >
+              <option value="EGP">EGP (£)</option>
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
+              <option value="GBP">GBP (£)</option>
+              <option value="AED">AED</option>
+              <option value="SAR">SAR</option>
+            </select>
           </div>
         </div>
 
