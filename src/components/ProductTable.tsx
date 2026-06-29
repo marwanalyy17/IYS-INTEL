@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
+import { ExternalLink, ChevronDown, ChevronUp, LineChart } from 'lucide-react'
 import { convertToEGP, formatCurrency } from '@/lib/currency'
 import { getColorHex } from '@/lib/colors'
 import { ScrapedProduct } from '@/lib/scraper'
 import { BRANDS } from '@/lib/brands'
+import PriceHistoryModal from './PriceHistoryModal'
 
 interface Props { products: ScrapedProduct[]; showEGP?: boolean }
 
@@ -51,10 +52,12 @@ function threatBadge(threat: string) {
 
 export default function ProductTable({ products, showEGP }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [historyProduct, setHistoryProduct] = useState<ScrapedProduct | null>(null)
 
   const toggle = (id: string) => setExpanded(v => v === id ? null : id)
 
   return (
+    <>
     <table className="w-full border-collapse text-[12px]" style={{ tableLayout: 'fixed' }}>
       <thead>
         <tr className="sticky top-0 z-10 bg-surface">
@@ -130,8 +133,15 @@ export default function ProductTable({ products, showEGP }: Props) {
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  <div className={`font-semibold ${priceTierClass(p.tier)}`}>
+                  <div className={`font-semibold ${priceTierClass(p.tier)} flex items-center gap-1.5`}>
                     {p.price ? formatCurrency(displayPrice, curr) : 'N/A'}
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setHistoryProduct(p) }}
+                      className="text-white/30 hover:text-accent transition-colors flex-shrink-0"
+                      title="View Price History"
+                    >
+                      <LineChart size={12} />
+                    </button>
                   </div>
                   {displayCompare && (
                     <div className="text-[10px] text-white/30 line-through">
@@ -226,14 +236,22 @@ export default function ProductTable({ products, showEGP }: Props) {
                             <div className={`text-[11px] ${vs.color}`}>{vs.text}</div>
                           </div>
                         )}
-                        <a
-                          href={p.productUrl || p.brandUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-md border border-white/[0.13] text-white/50 hover:bg-accent/10 hover:text-info hover:border-accent/30 transition-colors self-start"
-                        >
-                          <ExternalLink size={11} /> Open product page
-                        </a>
+                        <div className="flex gap-2">
+                          <a
+                            href={p.productUrl || p.brandUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-md border border-white/[0.13] text-white/50 hover:bg-accent/10 hover:text-info hover:border-accent/30 transition-colors self-start"
+                          >
+                            <ExternalLink size={11} /> Open product page
+                          </a>
+                          <button
+                            onClick={() => setHistoryProduct(p)}
+                            className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-md border border-white/[0.13] bg-white/[0.03] text-white/70 hover:bg-accent/20 hover:text-accent hover:border-accent/50 transition-colors self-start"
+                          >
+                            <LineChart size={11} /> View History
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -244,5 +262,13 @@ export default function ProductTable({ products, showEGP }: Props) {
         })}
       </tbody>
     </table>
+    
+    {historyProduct && (
+      <PriceHistoryModal
+        product={historyProduct}
+        onClose={() => setHistoryProduct(null)}
+      />
+    )}
+    </>
   )
 }
