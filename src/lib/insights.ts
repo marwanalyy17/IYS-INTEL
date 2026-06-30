@@ -22,6 +22,9 @@ export async function generateInsights(): Promise<string[]> {
 
   // 1. Detect New Product Drops
   for (const [brandId, products] of brandMap.entries()) {
+    const brandCurrency = BRANDS.find(b => b.id === brandId)?.currency || products[0]?.currency || 'EGP'
+    if (brandCurrency !== 'EGP') continue // Only track local brands
+    
     const brandName = products[0]?.brandName || brandId
     
     // Group new products by category
@@ -36,7 +39,7 @@ export async function generateInsights(): Promise<string[]> {
 
     // Generate events for categories with multiple new items
     for (const [category, count] of newByCategory.entries()) {
-      if (count >= 2) { // Only care if they dropped at least 2 items
+      if (count >= 2 && count <= 20) { // Ignore >20 as it's likely a first-time scrape anomaly
         events.push({
           score: count * 10, // Weight new products
           text: `${brandName} introduced ${count} new ${category} to their catalog.`
@@ -47,6 +50,9 @@ export async function generateInsights(): Promise<string[]> {
 
   // 2. Detect Sales / Price Drops
   for (const brandId of brandMap.keys()) {
+    const brandCurrency = BRANDS.find(b => b.id === brandId)?.currency || 'EGP'
+    if (brandCurrency !== 'EGP') continue // Only track local brands
+
     try {
       const history = await getBrandPriceHistory(brandId)
       const brandName = allProducts.find(p => p.brandId === brandId)?.brandName || brandId

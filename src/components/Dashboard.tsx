@@ -222,10 +222,12 @@ export default function Dashboard() {
           />
         </div>
 
-        <div className="flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-full border border-success/30 bg-success/10 text-success whitespace-nowrap">
-          <span className="font-medium">Avg Price: IYS {iysAvgText}</span>
-          <span className="text-success/60">vs</span>
-          <span>EGP Market {compAvgText}</span>
+        <div className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-full border border-success/40 bg-success/15 text-success whitespace-nowrap shadow-sm">
+          <span className="font-semibold uppercase tracking-wider">{activeTag || (query ? `"${query}"` : 'All Categories')}</span>
+          <span className="w-px h-3 bg-success/30 mx-1"></span>
+          <span className="font-medium">IYS: {iysAvgText}</span>
+          <span className="text-success/60 mx-0.5">vs</span>
+          <span className="font-bold">Local Market: {compAvgText}</span>
         </div>
 
         <button
