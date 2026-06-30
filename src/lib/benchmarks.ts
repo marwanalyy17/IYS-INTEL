@@ -12,7 +12,9 @@ export const IYS_BENCHMARKS: Record<string, { price: number; label: string }> = 
   'jacket':       { price: 1499, label: 'IYS Jackets' },
   'pjoys':        { price: 799,  label: 'IYS Pjoys' },
   'pshorts':      { price: 599,  label: 'IYS Pshorts' },
-  'accessories':  { price: 299,  label: 'IYS Accessories' },
+  'shirt':        { price: 1299, label: 'IYS Shirts' },
+  'jeans':        { price: 1699, label: 'IYS Denim' },
+  'beach':        { price: 899,  label: 'IYS Beachwear' },
 }
 
 export function calculateProductThreat(category: string, priceEGP: number): 'h' | 'm' | 'l' {

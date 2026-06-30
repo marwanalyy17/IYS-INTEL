@@ -180,7 +180,6 @@ export default function Dashboard() {
 
     filtered.forEach(p => {
       const brandCurrency = BRANDS.find(b => b.id === p.brandId)?.currency || p.currency || 'EGP'
-      // Only include native EGP brands in the dashboard average calculation
       if (brandCurrency === 'EGP') {
         const egpPrice = p.price ?? 0
         if (egpPrice > 0) {
@@ -188,16 +187,32 @@ export default function Dashboard() {
           validComp++
         }
       }
-
-      const bench = IYS_BENCHMARKS[p.category]
-      if (bench && bench.price > 0) {
-        totalIys += bench.price
-        validIys++
-      }
     })
 
     if (validComp > 0) compAvgText = Math.round(totalComp / validComp).toLocaleString() + " EGP"
-    if (validIys > 0) iysAvgText = Math.round(totalIys / validIys).toLocaleString() + " EGP"
+
+    // IYS Average Logic
+    const queryLower = activeTag ? (IYS_QUICK_TAGS.find(t => t.label === activeTag)?.query || '').toLowerCase() : query.toLowerCase()
+    
+    if (queryLower) {
+      // Try to find a direct benchmark match for the search/tag
+      const matchedBenchKey = Object.keys(IYS_BENCHMARKS).find(k => k === queryLower || queryLower.includes(k) || k.includes(queryLower))
+      if (matchedBenchKey && IYS_BENCHMARKS[matchedBenchKey]) {
+        iysAvgText = IYS_BENCHMARKS[matchedBenchKey].price.toLocaleString() + " EGP"
+      }
+    }
+
+    if (iysAvgText === "N/A") {
+      // Fallback: average the benchmarks of the matching competitor products' categories
+      filtered.forEach(p => {
+        const bench = p.category ? IYS_BENCHMARKS[p.category.toLowerCase()] : undefined
+        if (bench && bench.price > 0) {
+          totalIys += bench.price
+          validIys++
+        }
+      })
+      if (validIys > 0) iysAvgText = Math.round(totalIys / validIys).toLocaleString() + " EGP"
+    }
   }
 
   return (

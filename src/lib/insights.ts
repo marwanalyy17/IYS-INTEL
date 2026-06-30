@@ -94,13 +94,69 @@ export async function generateInsights(): Promise<string[]> {
     }
   }
 
+  // 3. Strategic Market Positioning (Volume & Pricing)
+  // Group all local products by category, then by brand
+  const categoryStats = new Map<string, Map<string, { count: number, totalPrice: number }>>()
+  
+  for (const p of allProducts) {
+    if (!p.category || !p.price) continue
+    const brandCurrency = BRANDS.find(b => b.id === p.brandId)?.currency || p.currency || 'EGP'
+    if (brandCurrency !== 'EGP') continue
+
+    if (!categoryStats.has(p.category)) categoryStats.set(p.category, new Map())
+    const brandMapForCat = categoryStats.get(p.category)!
+    
+    if (!brandMapForCat.has(p.brandId)) brandMapForCat.set(p.brandId, { count: 0, totalPrice: 0 })
+    const stats = brandMapForCat.get(p.brandId)!
+    stats.count += 1
+    stats.totalPrice += p.price
+  }
+
+  // Generate strategic positioning insights
+  for (const [category, brandsInCat] of categoryStats.entries()) {
+    // Only analyze categories with decent representation
+    if (brandsInCat.size < 3) continue
+
+    let maxVolBrand = '', maxVol = 0
+    let maxAvgPriceBrand = '', maxAvgPrice = 0
+    let minAvgPriceBrand = '', minAvgPrice = Infinity
+
+    for (const [brandId, stats] of brandsInCat.entries()) {
+      const avgPrice = stats.totalPrice / stats.count
+      if (stats.count > maxVol) { maxVol = stats.count; maxVolBrand = brandId }
+      // Only consider pricing extremes if they have at least 3 products in the category to avoid outliers
+      if (stats.count >= 3) {
+        if (avgPrice > maxAvgPrice) { maxAvgPrice = avgPrice; maxAvgPriceBrand = brandId }
+        if (avgPrice < minAvgPrice) { minAvgPrice = avgPrice; minAvgPriceBrand = brandId }
+      }
+    }
+
+    const getBrandName = (id: string) => allProducts.find(p => p.brandId === id)?.brandName || id
+
+    if (maxVol >= 15) {
+      events.push({
+        score: maxVol * 2, // Volume dominance
+        text: `${getBrandName(maxVolBrand)} currently dominates the ${category} market by volume (${maxVol} active products).`
+      })
+    }
+
+    // High premium insight
+    if (maxAvgPriceBrand && maxAvgPrice > 2000) {
+      events.push({
+        score: 15,
+        text: `${getBrandName(maxAvgPriceBrand)} commands the highest market premium for ${category}, averaging ${Math.round(maxAvgPrice).toLocaleString()} EGP.`
+      })
+    }
+  }
+
   // Sort by score descending, take top 3
   events.sort((a, b) => b.score - a.score)
-  const topEvents = events.slice(0, 3).map(e => e.text)
+  // Deduplicate text in case of identical insights
+  const topEvents = Array.from(new Set(events.map(e => e.text))).slice(0, 3)
 
   // Fallback if nothing happened
   if (topEvents.length === 0) {
-    topEvents.push("No major market events detected in the last 7 days.")
+    topEvents.push("Market is currently stable. Keep monitoring for new drops and sales.")
   }
 
   return topEvents
