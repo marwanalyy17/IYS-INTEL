@@ -21,6 +21,7 @@ export interface ScrapedProduct {
   tags: string[]
   colors?: string[]
   scrapedAt: string
+  firstDiscoveredAt?: string
 }
 
 const HEADERS = {

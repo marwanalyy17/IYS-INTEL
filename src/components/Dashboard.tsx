@@ -180,10 +180,13 @@ export default function Dashboard() {
 
     filtered.forEach(p => {
       const brandCurrency = BRANDS.find(b => b.id === p.brandId)?.currency || p.currency || 'EGP'
-      const egpPrice = convertToEGP(p.price ?? 0, brandCurrency)
-      if (egpPrice > 0) {
-        totalComp += egpPrice
-        validComp++
+      // Only include native EGP brands in the dashboard average calculation
+      if (brandCurrency === 'EGP') {
+        const egpPrice = p.price ?? 0
+        if (egpPrice > 0) {
+          totalComp += egpPrice
+          validComp++
+        }
       }
 
       const bench = IYS_BENCHMARKS[p.category]
@@ -222,7 +225,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-full border border-success/30 bg-success/10 text-success whitespace-nowrap">
           <span className="font-medium">Avg Price: IYS {iysAvgText}</span>
           <span className="text-success/60">vs</span>
-          <span>Competitors {compAvgText}</span>
+          <span>EGP Market {compAvgText}</span>
         </div>
 
         <button
@@ -271,6 +274,21 @@ export default function Dashboard() {
           </button>
         ))}
       </div>
+
+      {/* ── Weekly Insights ── */}
+      {(meta as any).insights && (meta as any).insights.length > 0 && (
+        <div className="px-4 py-2 bg-surface flex items-center gap-3 border-b border-white/[0.07] flex-shrink-0 overflow-x-auto no-scrollbar">
+          <span className="text-[9px] text-accent uppercase tracking-widest whitespace-nowrap font-semibold">Weekly Insights</span>
+          <div className="flex gap-4">
+            {(meta as any).insights.map((insight: string, idx: number) => (
+              <div key={idx} className="flex items-center gap-1.5 text-[11px] text-white/70 whitespace-nowrap bg-white/[0.03] px-2.5 py-1 rounded-md border border-white/[0.05]">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent/60"></span>
+                {insight}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Workspace ── */}
       <div className="flex flex-1 overflow-hidden">

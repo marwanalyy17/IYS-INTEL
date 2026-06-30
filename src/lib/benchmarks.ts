@@ -27,15 +27,15 @@ export function calculateProductThreat(category: string, priceEGP: number): 'h' 
   const pct = diff / bench.price // negative means cheaper, positive means more expensive
 
   // Precise mapping logic:
-  // If their price is cheaper, similar, or up to 20% more expensive: Direct Threat ('h')
-  if (pct <= 0.20) {
+  // If their price is within ±35% of IYS price: Direct Threat ('h')
+  if (pct >= -0.35 && pct <= 0.35) {
     return 'h'
   } 
-  // If their price is between 20% to 60% more expensive: Adjacent ('m')
-  else if (pct <= 0.60) {
+  // If their price is between 35% to 60% more expensive: Adjacent ('m')
+  else if (pct > 0.35 && pct <= 0.60) {
     return 'm'
   } 
-  // If their price is much more expensive: Low overlap ('l')
+  // If their price is >35% cheaper OR >60% more expensive: Low overlap ('l')
   else {
     return 'l'
   }

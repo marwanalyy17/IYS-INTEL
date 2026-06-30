@@ -50,11 +50,25 @@ export async function getAllProducts(): Promise<ScrapedProduct[]> {
 }
 
 export async function saveAllProducts(products: ScrapedProduct[]): Promise<void> {
-  await redisSet(PRODUCTS_KEY, products)
+  const existing = await getAllProducts()
+  const existingMap = new Map(existing.map(p => [`${p.brandId}:${p.id}`, p]))
+
+  const merged = products.map(p => {
+    const prev = existingMap.get(`${p.brandId}:${p.id}`)
+    return {
+      ...p,
+      firstDiscoveredAt: prev?.firstDiscoveredAt || prev?.scrapedAt || p.scrapedAt
+    }
+  })
+
+  await redisSet(PRODUCTS_KEY, merged)
+  const prevMeta = await getMeta()
+  
   await redisSet(META_KEY, {
     lastScraped: new Date().toISOString(),
-    totalProducts: products.length,
-    brandCount: new Set(products.map(p => p.brandId)).size,
+    totalProducts: merged.length,
+    brandCount: new Set(merged.map(p => p.brandId)).size,
+    insights: prevMeta.insights || [],
   })
 }
 
@@ -153,14 +167,15 @@ export interface ScrapeMeta {
   lastScraped: string | null
   totalProducts: number
   brandCount: number
+  insights?: string[]
 }
 
 export async function getMeta(): Promise<ScrapeMeta> {
   try {
     const meta = await redisGet<ScrapeMeta>(META_KEY)
-    return meta ?? { lastScraped: null, totalProducts: 0, brandCount: 0 }
+    return meta ?? { lastScraped: null, totalProducts: 0, brandCount: 0, insights: [] }
   } catch {
-    return { lastScraped: null, totalProducts: 0, brandCount: 0 }
+    return { lastScraped: null, totalProducts: 0, brandCount: 0, insights: [] }
   }
 }
 
