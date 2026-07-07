@@ -8,7 +8,6 @@ import { convertToEGP } from '@/lib/currency'
 import { IYS_BENCHMARKS } from '@/lib/benchmarks'
 import ProductTable from './ProductTable'
 import ProductGrid from './ProductGrid'
-import BrandPanel from './BrandPanel'
 import AddBrandModal from './AddBrandModal'
 import ExportButton from './ExportButton'
 import {
@@ -36,7 +35,6 @@ export default function Dashboard() {
   const [view, setView] = useState<ViewMode>('table')
   const [showEGP, setShowEGP] = useState(false)
   const [visibleCount, setVisibleCount] = useState(100)
-  const [panelOpen, setPanelOpen] = useState(true)
   const [addBrandOpen, setAddBrandOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [scraping, setScraping] = useState(false)
@@ -264,12 +262,6 @@ export default function Dashboard() {
           {scraping ? 'Scraping…' : 'Rescrape'}
         </button>
 
-        <button
-          onClick={() => setPanelOpen(v => !v)}
-          className={`flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md border transition-colors ${panelOpen ? 'border-accent/40 bg-accent/10 text-info' : 'border-white/[0.13] text-white/60 hover:bg-white/[0.07]'}`}
-        >
-          <Building2 size={12} /> Brands
-        </button>
 
         <button
           onClick={async () => {
@@ -472,14 +464,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── Brand health panel ── */}
-        {panelOpen && (
-          <BrandPanel
-            products={products}
-            allBrands={BRANDS}
-            onClose={() => setPanelOpen(false)}
-          />
-        )}
       </div>
 
       {addBrandOpen && (
