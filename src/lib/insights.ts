@@ -83,9 +83,10 @@ export async function generateInsights(): Promise<string[]> {
 
       for (const [category, count] of dropsByCategory.entries()) {
         if (count >= 2) {
+          const categoryText = category ? ` in their ${category} collection` : ' across their collection'
           events.push({
             score: count * 15, // Weight sales slightly higher than new products
-            text: `${brandName} launched a sale on ${count} items in their ${category} collection.`
+            text: `${brandName} launched a sale on ${count} items${categoryText}.`
           })
         }
       }
