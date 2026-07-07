@@ -271,6 +271,16 @@ export default function Dashboard() {
           <Building2 size={12} /> Brands
         </button>
 
+        <button
+          onClick={async () => {
+            await fetch('/api/auth/logout', { method: 'POST' })
+            window.location.href = '/login'
+          }}
+          className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md border border-white/[0.13] text-red-400/80 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-colors ml-2"
+        >
+          Logout
+        </button>
+
         <span className="text-[9px] text-white/25 uppercase tracking-widest whitespace-nowrap ml-auto">Powered by Marwan Aly</span>
       </div>
 
