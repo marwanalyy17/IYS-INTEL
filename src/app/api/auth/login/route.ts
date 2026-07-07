@@ -5,23 +5,21 @@ export async function POST(request: Request) {
   try {
     const { username, password } = await request.json()
 
-    // Hardcoded list of authorized internal users
-    const VALID_USERS = [
-      'habibaadel1994@gmail.com',
-      'zashrafyahia01@gmail.com',
-      'nazerasakina@gmail.com',
-      'nouressamattia@gmail.com',
-      'nadahkoura@gmail.com',
-      'momenghaly@yahoo.com',
-      'marwanalyy17@gmail.com',
-      'marymmohamd1666@gmail.com'
-    ]
+    // Hardcoded list of authorized internal users and their unique passwords
+    const AUTHORIZED_USERS: Record<string, string> = {
+      'habibaadel1994@gmail.com': 'Habiba#94',
+      'zashrafyahia01@gmail.com': 'Zashraf$01',
+      'nazerasakina@gmail.com': 'Nazera*26',
+      'nouressamattia@gmail.com': 'Nour!2026',
+      'nadahkoura@gmail.com': 'Nada@773',
+      'momenghaly@yahoo.com': 'Momen%82',
+      'marwanalyy17@gmail.com': 'Marwan&17',
+      'marymmohamd1666@gmail.com': 'Marym^66'
+    }
 
-    // Default password for all internal accounts (since none were provided in the screenshot)
-    const DEFAULT_PASSWORD = 'iyspassword123'
-
-    const isValidUser = VALID_USERS.includes(username.toLowerCase().trim())
-    const isPasswordCorrect = password === DEFAULT_PASSWORD
+    const normalizedUsername = username.toLowerCase().trim()
+    const isValidUser = Object.keys(AUTHORIZED_USERS).includes(normalizedUsername)
+    const isPasswordCorrect = AUTHORIZED_USERS[normalizedUsername] === password
 
     if (isValidUser && isPasswordCorrect) {
       // Create a secure session token (in a real app this would be a JWT, but a secure random string works for basic auth)
