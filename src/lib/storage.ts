@@ -178,6 +178,29 @@ export async function upsertBrandProducts(brandId: string, newProducts: ScrapedP
   await saveAllProducts([...others, ...newProducts])
 }
 
+export async function removeBrandProducts(brandId: string): Promise<void> {
+  // Remove products from the main store
+  const all = await getAllProducts()
+  const remaining = all.filter(p => p.brandId !== brandId)
+  
+  // Get the IDs of products being removed so we can clean up their history keys
+  const removedProducts = all.filter(p => p.brandId === brandId)
+  
+  // Save the remaining products (this also updates meta counts)
+  await saveAllProducts(remaining)
+  
+  // Clean up price history keys for removed products
+  if (removedProducts.length > 0) {
+    await withRedis(async client => {
+      const pipeline = client.pipeline()
+      for (const p of removedProducts) {
+        pipeline.del(`iys:history:${p.brandId}:${p.id}`)
+      }
+      await pipeline.exec()
+    })
+  }
+}
+
 // ── Price History ───────────────────────────────────────────────────────────────
 
 export interface PriceHistoryEntry {

@@ -12,7 +12,7 @@ import AddBrandModal from './AddBrandModal'
 import ExportButton from './ExportButton'
 import {
   Search, LayoutGrid, Table2, Building2, Plus,
-  RefreshCw, Wifi, WifiOff, ChevronDown, X
+  RefreshCw, Wifi, WifiOff, ChevronDown, X, Trash2
 } from 'lucide-react'
 
 interface Meta {
@@ -412,15 +412,38 @@ export default function Dashboard() {
                       </button>
                     )}
                     {filteredBrandList.map(([id, name]) => (
-                      <button
+                      <div
                         key={id}
-                        onClick={() => { setBrandFilter(id); setBrandDropdownOpen(false); setBrandSearch('') }}
-                        className={`w-full text-left px-3 py-1.5 text-[11px] transition-colors ${
+                        className={`flex items-center group w-full px-3 py-1.5 text-[11px] transition-colors ${
                           brandFilter === id ? 'bg-accent/10 text-info' : 'text-white/60 hover:bg-white/[0.05] hover:text-white'
                         }`}
                       >
-                        {name}
-                      </button>
+                        <button
+                          onClick={() => { setBrandFilter(id); setBrandDropdownOpen(false); setBrandSearch('') }}
+                          className="flex-1 text-left truncate"
+                        >
+                          {name}
+                        </button>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            if (!confirm(`Remove "${name}" and all its products from the dashboard?`)) return
+                            try {
+                              await fetch('/api/brands', {
+                                method: 'DELETE',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ id }),
+                              })
+                              if (brandFilter === id) setBrandFilter('')
+                              loadProducts()
+                            } catch {}
+                          }}
+                          className="opacity-0 group-hover:opacity-100 ml-1 p-0.5 rounded text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                          title={`Remove ${name}`}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
                     ))}
                     {filteredBrandList.length === 0 && (
                       <div className="px-3 py-2 text-[10px] text-white/30">No brands found</div>
