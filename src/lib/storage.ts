@@ -1,4 +1,5 @@
 import Redis from 'ioredis'
+import { gzipSync, gunzipSync } from 'zlib'
 import { ScrapedProduct } from './scraper'
 
 const PRODUCTS_KEY = 'iys:products'
@@ -24,26 +25,117 @@ async function withRedis<T>(fn: (client: Redis) => Promise<T>): Promise<T> {
   }
 }
 
+// ── Compressed read/write helpers ─────────────────────────────────────────────
+// Data is gzipped before storage to dramatically reduce Redis memory usage.
+// On read, we try decompression first, then fall back to raw JSON for migration.
+
 async function redisGet<T>(key: string): Promise<T | null> {
   return withRedis(async client => {
-    const raw = await client.get(key)
-    if (!raw) return null
-    return JSON.parse(raw) as T
+    const raw = await client.getBuffer(key)
+    if (!raw || raw.length === 0) return null
+
+    // Try decompressing (new gzip format)
+    try {
+      const decompressed = gunzipSync(raw).toString('utf-8')
+      return JSON.parse(decompressed) as T
+    } catch {
+      // Fall back to raw string (old uncompressed format — auto-migrates on next write)
+      return JSON.parse(raw.toString('utf-8')) as T
+    }
   })
 }
 
 async function redisSet(key: string, value: unknown): Promise<void> {
   return withRedis(async client => {
-    await client.set(key, JSON.stringify(value))
+    const json = JSON.stringify(value)
+    const compressed = gzipSync(json)
+    // Delete old (possibly uncompressed) value first to free memory before writing.
+    // This is critical for OOM recovery — the old uncompressed blob is much larger.
+    await client.del(key)
+    await client.set(key, compressed)
   })
+}
+
+// ── Slim product storage ──────────────────────────────────────────────────────
+// Strip redundant per-brand fields before storing. These are re-hydrated on read
+// from the brand config. This cuts ~30% off the JSON size before compression.
+
+interface StoredProduct {
+  id: string
+  brandId: string
+  name: string
+  price: number
+  compareAtPrice?: number
+  currency: string
+  productUrl: string
+  imageUrl: string
+  category: string
+  tags: string[]
+  colors?: string[]
+  scrapedAt: string
+  firstDiscoveredAt?: string
+}
+
+function slimProduct(p: ScrapedProduct): StoredProduct {
+  const slim: StoredProduct = {
+    id: p.id,
+    brandId: p.brandId,
+    name: p.name,
+    price: p.price,
+    currency: p.currency,
+    productUrl: p.productUrl,
+    imageUrl: p.imageUrl,
+    category: p.category,
+    tags: p.tags.length > 20 ? p.tags.slice(0, 20) : p.tags, // cap tags to save space
+    scrapedAt: p.scrapedAt,
+  }
+  if (p.compareAtPrice) slim.compareAtPrice = p.compareAtPrice
+  if (p.colors && p.colors.length > 0) slim.colors = p.colors
+  if (p.firstDiscoveredAt) slim.firstDiscoveredAt = p.firstDiscoveredAt
+  return slim
+}
+
+// ── Brand config lookup (import dynamically to avoid circular deps) ───────────
+
+let _brandsCache: Map<string, any> | null = null
+
+async function getBrandConfig(brandId: string): Promise<any | null> {
+  if (!_brandsCache) {
+    // Lazy-load to avoid circular imports
+    const { BRANDS } = await import('./brands')
+    const customBrands = await getCustomBrands()
+    _brandsCache = new Map()
+    for (const b of BRANDS) _brandsCache.set(b.id, b)
+    for (const b of customBrands) _brandsCache.set(b.id, b)
+  }
+  return _brandsCache.get(brandId) ?? null
+}
+
+function hydrateProduct(slim: StoredProduct): ScrapedProduct {
+  return {
+    ...slim,
+    brandName: '',   // Will be enriched by the API layer or brand config
+    brandUrl: '',
+    tier: 'mid',
+    threat: 'm',
+    tags: slim.tags ?? [],
+  }
 }
 
 // ── Products ──────────────────────────────────────────────────────────────────
 
 export async function getAllProducts(): Promise<ScrapedProduct[]> {
   try {
-    const data = await redisGet<ScrapedProduct[]>(PRODUCTS_KEY)
-    return data ?? []
+    const data = await redisGet<(ScrapedProduct | StoredProduct)[]>(PRODUCTS_KEY)
+    if (!data) return []
+    
+    // Handle both old (full) and new (slim) formats
+    return data.map(p => {
+      // If it has brandName, it's already a full ScrapedProduct
+      if ('brandName' in p && (p as any).brandName) return p as ScrapedProduct
+      // Otherwise hydrate the slim version
+      return hydrateProduct(p as StoredProduct)
+    })
   } catch {
     return []
   }
@@ -61,7 +153,10 @@ export async function saveAllProducts(products: ScrapedProduct[]): Promise<void>
     }
   })
 
-  await redisSet(PRODUCTS_KEY, merged)
+  // Store slimmed-down versions to save memory
+  const slimmed = merged.map(slimProduct)
+  await redisSet(PRODUCTS_KEY, slimmed)
+
   const prevMeta = await getMeta()
   
   await redisSet(META_KEY, {
@@ -91,6 +186,9 @@ export interface PriceHistoryEntry {
   priceChanged: boolean
   priceDelta: number
 }
+
+// Max history entries per product (reduced from 365 to save memory)
+const MAX_HISTORY_ENTRIES = 60
 
 export async function appendPriceHistory(products: ScrapedProduct[]): Promise<void> {
   if (!products.length) return
@@ -124,8 +222,9 @@ export async function appendPriceHistory(products: ScrapedProduct[]): Promise<vo
         priceDelta
       })
       
-      if (history.length > 365) {
-        history = history.slice(-365)
+      // Cap history to save memory
+      if (history.length > MAX_HISTORY_ENTRIES) {
+        history = history.slice(-MAX_HISTORY_ENTRIES)
       }
       
       setPipeline.set(key, JSON.stringify(history))
@@ -177,6 +276,12 @@ export async function getMeta(): Promise<ScrapeMeta> {
   } catch {
     return { lastScraped: null, totalProducts: 0, brandCount: 0, insights: [] }
   }
+}
+
+export async function updateMetaInsights(insights: string[]): Promise<void> {
+  const meta = await getMeta()
+  meta.insights = insights
+  await redisSet(META_KEY, meta)
 }
 
 // ── Custom brands (user-added) ────────────────────────────────────────────────

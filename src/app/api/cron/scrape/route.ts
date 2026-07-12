@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { BRANDS } from '@/lib/brands'
 import { getCustomBrands } from '@/lib/storage'
 import { scrapeBrand } from '@/lib/scraper'
-import { saveAllProducts, appendPriceHistory, getMeta } from '@/lib/storage'
+import { saveAllProducts, appendPriceHistory, updateMetaInsights } from '@/lib/storage'
 import { generateInsights } from '@/lib/insights'
-import Redis from 'ioredis'
 import { ScrapedProduct } from '@/lib/scraper'
 import { Brand } from '@/lib/brands'
 
@@ -69,14 +68,7 @@ export async function GET(req: NextRequest) {
   // Generate weekly insights and update meta
   try {
     const insights = await generateInsights()
-    const url = process.env.KV_URL || process.env.REDIS_URL || ''
-    const useTLS = url.startsWith('rediss://')
-    const client = new Redis(url, { ...(useTLS ? { tls: { rejectUnauthorized: false } } : {}), maxRetriesPerRequest: 3 })
-    const metaStr = await client.get('iys:meta')
-    let meta = metaStr ? JSON.parse(metaStr) : {}
-    meta.insights = insights
-    await client.set('iys:meta', JSON.stringify(meta))
-    client.disconnect()
+    await updateMetaInsights(insights)
   } catch (err) {
     console.error('Failed to generate insights:', err)
   }
