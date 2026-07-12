@@ -23,6 +23,14 @@ export default function AddBrandModal({ onClose, onAdded }: Props) {
     if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
       formattedUrl = `https://${formattedUrl}`
     }
+
+    // Strip query params (UTM tags, etc.) and hash fragments — keep only origin + pathname
+    try {
+      const parsed = new URL(formattedUrl)
+      formattedUrl = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '')
+    } catch {
+      setError('Invalid URL format'); return
+    }
     
     setLoading(true); setError(''); setSuccess('')
 

@@ -130,7 +130,15 @@ async function detectShopifyCurrency(baseUrl: string): Promise<string | null> {
 
 export async function scrapeShopify(brand: Brand): Promise<ScrapedProduct[]> {
   const products: ScrapedProduct[] = []
-  const base = brand.url.replace(/\/$/, '')
+  
+  // Ensure clean base URL (no query params, no trailing slashes)
+  let base: string
+  try {
+    const parsed = new URL(brand.url)
+    base = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '')
+  } catch {
+    base = brand.url.replace(/\/+$/, '')
+  }
 
   // Determine currency: brand config > auto-detect from homepage > fallback EGP
   let currency = brand.currency
@@ -316,15 +324,26 @@ export async function scrapeBrand(brand: Brand): Promise<ScrapedProduct[]> {
 // ── Auto-detect if a URL is Shopify ──────────────────────────────────────────
 
 export async function detectStrategy(url: string): Promise<'shopify' | 'html'> {
+  // Ensure we have a clean base URL (no query params, no trailing slashes)
+  let base: string
   try {
-    const base = url.replace(/\/$/, '')
-    const { status } = await axios.get(`${base}/products.json?limit=1`, {
+    const parsed = new URL(url)
+    base = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '')
+  } catch {
+    base = url.replace(/\/+$/, '')
+  }
+
+  try {
+    const { status, data } = await axios.get(`${base}/products.json?limit=1`, {
       headers: HEADERS,
-      timeout: 8000,
+      timeout: 10000,
       validateStatus: s => s < 500,
+      maxRedirects: 5,
     })
-    if (status === 200) return 'shopify'
-  } catch {}
+    if (status === 200 && data?.products) return 'shopify'
+  } catch (err: any) {
+    console.warn(`[detectStrategy] products.json check failed for ${base}:`, err.message)
+  }
   return 'html'
 }
 

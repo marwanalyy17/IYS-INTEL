@@ -22,7 +22,16 @@ export async function POST(req: NextRequest) {
     if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
       formattedUrl = `https://${formattedUrl}`
     }
-    const normalizedUrl = formattedUrl.replace(/\/$/, '')
+
+    // Strip query params (UTM tags, etc.) and hash fragments — keep only origin + pathname
+    try {
+      const parsed = new URL(formattedUrl)
+      formattedUrl = `${parsed.origin}${parsed.pathname}`
+    } catch {
+      return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 })
+    }
+
+    const normalizedUrl = formattedUrl.replace(/\/+$/, '')
     const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_')
 
     // Auto-detect Shopify vs HTML
@@ -93,13 +102,21 @@ export async function POST(req: NextRequest) {
     // Merge products into main store
     await upsertBrandProducts(id, updatedProducts)
 
+    // If scraping returned 0 products, warn the user instead of silently succeeding
+    if (updatedProducts.length === 0) {
+      return NextResponse.json({ 
+        error: `Scraping returned 0 products. The site may be blocking our scraper, or the URL may not be a valid product catalog page. Try pasting just the base domain (e.g. https://example.com).` 
+      }, { status: 422 })
+    }
+
     return NextResponse.json({
       success: true,
       brand: { id, name, url: normalizedUrl, strategy, tier, threat },
       productCount: updatedProducts.length,
     })
-  } catch (err) {
+  } catch (err: any) {
     console.error('POST /api/scrape-brand error:', err)
-    return NextResponse.json({ error: 'Scraping failed. Check the URL and try again.' }, { status: 500 })
+    const msg = err?.message || 'Unknown error'
+    return NextResponse.json({ error: `Scraping failed: ${msg}. Try pasting just the base domain URL.` }, { status: 500 })
   }
 }
