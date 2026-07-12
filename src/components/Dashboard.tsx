@@ -12,7 +12,7 @@ import AddBrandModal from './AddBrandModal'
 import ExportButton from './ExportButton'
 import {
   Search, LayoutGrid, Table2, Building2, Plus,
-  RefreshCw, Wifi, WifiOff, ChevronDown, X, Trash2
+  RefreshCw, Wifi, WifiOff, ChevronDown, X, Trash2, Tag
 } from 'lucide-react'
 
 interface Meta {
@@ -273,6 +273,13 @@ export default function Dashboard() {
         >
           <Plus size={12} /> Add Brand
         </button>
+
+        <a
+          href="/sale"
+          className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20 hover:border-danger/50 transition-colors"
+        >
+          <Tag size={12} /> Sale
+        </a>
 
         <ExportButton products={filtered} />
 
