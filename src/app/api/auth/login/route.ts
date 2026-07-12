@@ -14,7 +14,9 @@ export async function POST(request: Request) {
       'nadahkoura@gmail.com': 'Nada@773',
       'momenghaly@yahoo.com': 'Momen%82',
       'marwanalyy17@gmail.com': 'Marwan&17',
-      'marymmohamd1666@gmail.com': 'Marym^66'
+      'marymmohamd1666@gmail.com': 'Marym^66',
+      'amr@inyourshoe.com': 'Amr#42',
+      'ezz@inyourshoe.com': 'Ezz$91'
     }
 
     const normalizedUsername = username.toLowerCase().trim()
