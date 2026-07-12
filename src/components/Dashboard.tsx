@@ -218,7 +218,7 @@ export default function Dashboard() {
         // Find which IYS category best matches this competitor product
         for (const tag of IYS_QUICK_TAGS) {
           if (!(tag as any).benchKey) continue
-          const score = scoreProduct(p, tag.query)
+          const score = scoreProduct(p.name, p.category, p.tags, expandQuery(tag.query))
           if (score > bestScore) {
             bestScore = score
             bestTag = tag
