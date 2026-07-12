@@ -243,8 +243,8 @@ export default function Dashboard() {
       {/* ── Topbar ── */}
       <div className="flex items-center gap-3 px-4 py-2.5 bg-surface border-b border-white/[0.07] flex-shrink-0">
         <div className="flex flex-col leading-tight whitespace-nowrap">
-          <span className="text-[13px] font-semibold tracking-wide">IYS Intelligence</span>
-          <span className="text-[10px] text-white/40 tracking-wider uppercase">Competitor Pricing Dashboard</span>
+          <span className="text-[13px] font-semibold tracking-wide">IYS Radar</span>
+          <span className="text-[10px] text-white/40 tracking-wider uppercase">Market Research Dashboard</span>
         </div>
 
         <div className="flex-1 relative">

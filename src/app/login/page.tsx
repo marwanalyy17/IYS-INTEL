@@ -47,7 +47,7 @@ export default function LoginPage() {
           <div className="w-12 h-12 bg-white/[0.03] border border-white/[0.1] rounded-xl flex items-center justify-center mb-4 text-accent shadow-inner">
             <Lock size={24} />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">IYS Intelligence</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-white">IYS Radar</h1>
           <p className="text-white/50 text-sm mt-1">Sign in to access the dashboard</p>
         </div>
 
