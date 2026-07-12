@@ -190,23 +190,47 @@ export default function Dashboard() {
     if (validComp > 0) compAvgText = Math.round(totalComp / validComp).toLocaleString() + " EGP"
 
     // IYS Average Logic
-    const queryLower = activeTag ? (IYS_QUICK_TAGS.find(t => t.label === activeTag)?.query || '').toLowerCase() : query.toLowerCase()
-    
-    if (queryLower) {
-      // Try to find a direct benchmark match for the search/tag
-      const matchedBenchKey = Object.keys(IYS_BENCHMARKS).find(k => k === queryLower || queryLower.includes(k) || k.includes(queryLower))
-      if (matchedBenchKey && IYS_BENCHMARKS[matchedBenchKey]) {
-        iysAvgText = IYS_BENCHMARKS[matchedBenchKey].price.toLocaleString() + " EGP"
+    const activeTagObj = activeTag ? IYS_QUICK_TAGS.find(t => t.label === activeTag) : undefined
+
+    if (activeTagObj && (activeTagObj as any).benchKey && IYS_BENCHMARKS[(activeTagObj as any).benchKey]) {
+      // Direct match from the selected Quick Tag
+      iysAvgText = IYS_BENCHMARKS[(activeTagObj as any).benchKey].price.toLocaleString() + " EGP"
+    } else if (!activeTag && query) {
+      // Try to match search query to a quick tag query or benchmark key
+      const queryLower = query.toLowerCase()
+      const matchedTag = IYS_QUICK_TAGS.find(t => t.query === queryLower || t.label.toLowerCase() === queryLower)
+      if (matchedTag && (matchedTag as any).benchKey && IYS_BENCHMARKS[(matchedTag as any).benchKey]) {
+        iysAvgText = IYS_BENCHMARKS[(matchedTag as any).benchKey].price.toLocaleString() + " EGP"
+      } else {
+        const matchedBenchKey = Object.keys(IYS_BENCHMARKS).find(k => k === queryLower || k.includes(queryLower))
+        if (matchedBenchKey && IYS_BENCHMARKS[matchedBenchKey]) {
+          iysAvgText = IYS_BENCHMARKS[matchedBenchKey].price.toLocaleString() + " EGP"
+        }
       }
     }
 
     if (iysAvgText === "N/A") {
-      // Fallback: average the benchmarks of the matching competitor products' categories
+      // Fallback: average the benchmarks of the matching competitor products using the synonym scoring engine
       filtered.forEach(p => {
-        const bench = p.category ? IYS_BENCHMARKS[p.category.toLowerCase()] : undefined
-        if (bench && bench.price > 0) {
-          totalIys += bench.price
-          validIys++
+        let bestTag = null
+        let bestScore = 0
+        
+        // Find which IYS category best matches this competitor product
+        for (const tag of IYS_QUICK_TAGS) {
+          if (!(tag as any).benchKey) continue
+          const score = scoreProduct(p, tag.query)
+          if (score > bestScore) {
+            bestScore = score
+            bestTag = tag
+          }
+        }
+
+        if (bestTag && (bestTag as any).benchKey) {
+          const bench = IYS_BENCHMARKS[(bestTag as any).benchKey]
+          if (bench && bench.price > 0) {
+            totalIys += bench.price
+            validIys++
+          }
         }
       })
       if (validIys > 0) iysAvgText = Math.round(totalIys / validIys).toLocaleString() + " EGP"
