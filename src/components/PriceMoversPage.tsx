@@ -146,12 +146,12 @@ export default function PriceMoversPage() {
                 <span className="text-white/70 font-medium">{filtered.length}</span> price moves
               </div>
               <div className="flex items-center gap-1.5 text-white/40">
-                <TrendingUp size={11} className="text-danger" />
-                <span className="text-danger font-medium">{increases.length}</span> increases
+                <TrendingUp size={11} className="text-success" />
+                <span className="text-success font-medium">{increases.length}</span> increases
               </div>
               <div className="flex items-center gap-1.5 text-white/40">
-                <TrendingDown size={11} className="text-success" />
-                <span className="text-success font-medium">{decreases.length}</span> drops
+                <TrendingDown size={11} className="text-danger" />
+                <span className="text-danger font-medium">{decreases.length}</span> drops
               </div>
             </div>
           </div>
@@ -178,7 +178,7 @@ export default function PriceMoversPage() {
                   onClick={() => setDirection(d)}
                   className={`text-[11px] px-2.5 py-1.5 transition-colors ${
                     direction === d
-                      ? d === 'up' ? 'bg-danger/15 text-danger' : d === 'down' ? 'bg-success/15 text-success' : 'bg-accent/10 text-info'
+                      ? d === 'up' ? 'bg-success/15 text-success' : d === 'down' ? 'bg-danger/15 text-danger' : 'bg-accent/10 text-info'
                       : 'text-white/50 hover:bg-white/[0.05]'
                   }`}
                 >
@@ -357,7 +357,7 @@ export default function PriceMoversPage() {
 
                     {/* Change */}
                     <td className="py-2 px-3 text-right">
-                      <span className={`inline-flex items-center gap-0.5 font-medium ${m.direction === 'up' ? 'text-danger' : 'text-success'}`}>
+                      <span className={`inline-flex items-center gap-0.5 font-medium ${m.direction === 'up' ? 'text-success' : 'text-danger'}`}>
                         {m.direction === 'up' ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
                         {m.direction === 'up' ? '+' : ''}{formatCurrency(m.priceDelta, m.currency)}
                       </span>
@@ -367,8 +367,8 @@ export default function PriceMoversPage() {
                     <td className="py-2 px-3 text-right">
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                         m.direction === 'up'
-                          ? 'bg-danger/15 text-danger'
-                          : 'bg-success/15 text-success'
+                          ? 'bg-success/15 text-success'
+                          : 'bg-danger/15 text-danger'
                       }`}>
                         {m.direction === 'up' ? '+' : '-'}{m.changePercent}%
                       </span>
