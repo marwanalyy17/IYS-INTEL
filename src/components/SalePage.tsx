@@ -54,7 +54,12 @@ export default function SalePage() {
     const sales: SaleProduct[] = []
     for (const p of products) {
       if (p.compareAtPrice && p.compareAtPrice > p.price && p.price > 0) {
-        const brandCurrency = BRANDS.find(b => b.id === p.brandId)?.currency || p.currency || 'EGP'
+        const brandConfig = BRANDS.find(b => b.id === p.brandId)
+        const brandCurrency = brandConfig?.currency || p.currency || 'EGP'
+
+        // Only include local market brands (EGP currency)
+        if (brandCurrency !== 'EGP') continue
+
         const currentEGP = convertToEGP(p.price, brandCurrency)
         const originalEGP = convertToEGP(p.compareAtPrice, brandCurrency)
         const discountPercent = Math.round(((originalEGP - currentEGP) / originalEGP) * 100)

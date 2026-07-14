@@ -12,7 +12,7 @@ import AddBrandModal from './AddBrandModal'
 import ExportButton from './ExportButton'
 import {
   Search, LayoutGrid, Table2, Building2, Plus,
-  RefreshCw, Wifi, WifiOff, ChevronDown, X, Trash2, Tag
+  RefreshCw, Wifi, WifiOff, ChevronDown, X, Trash2, Tag, Activity
 } from 'lucide-react'
 
 interface Meta {
@@ -279,6 +279,13 @@ export default function Dashboard() {
           className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20 hover:border-danger/50 transition-colors"
         >
           <Tag size={12} /> Sale
+        </a>
+
+        <a
+          href="/price-moves"
+          className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md border border-info/30 bg-info/10 text-info hover:bg-info/20 hover:border-info/50 transition-colors"
+        >
+          <Activity size={12} /> Price Moves
         </a>
 
         <ExportButton products={filtered} />
