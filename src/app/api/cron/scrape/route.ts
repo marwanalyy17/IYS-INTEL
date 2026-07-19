@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { BRANDS } from '@/lib/brands'
 import { getCustomBrands } from '@/lib/storage'
 import { scrapeBrand } from '@/lib/scraper'
-import { saveAllProducts, appendPriceHistory, updateMetaInsights } from '@/lib/storage'
+import { upsertBrandProducts, appendPriceHistory, updateMetaInsights } from '@/lib/storage'
 import { generateInsights } from '@/lib/insights'
 import { ScrapedProduct } from '@/lib/scraper'
 import { Brand } from '@/lib/brands'
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   }
 
   const results: { brand: string; count: number; error?: string }[] = []
-  const allProducts: ScrapedProduct[] = []
+  const allScrapedProducts: ScrapedProduct[] = []
 
   // Load custom user-added brands
   let customBrands: Brand[] = []
@@ -51,19 +51,33 @@ export async function GET(req: NextRequest) {
       batch.map(brand => scrapeBrand(brand))
     )
 
-    batchResults.forEach((result, idx) => {
+    for (let idx = 0; idx < batchResults.length; idx++) {
+      const result = batchResults[idx]
       const brand = batch[idx]
-      if (result.status === 'fulfilled') {
-        allProducts.push(...result.value)
+
+      if (result.status === 'fulfilled' && result.value.length > 0) {
+        // Only update this brand's products if the scrape returned data.
+        // If a brand's site is down or returns 0, its old data is preserved.
+        try {
+          await upsertBrandProducts(brand.id, result.value)
+        } catch (err) {
+          console.error(`Failed to save products for ${brand.name}:`, err)
+        }
+        allScrapedProducts.push(...result.value)
         results.push({ brand: brand.name, count: result.value.length })
       } else {
-        results.push({ brand: brand.name, count: 0, error: String(result.reason) })
+        const error = result.status === 'rejected'
+          ? String(result.reason)
+          : 'Returned 0 products (site may be down)'
+        results.push({ brand: brand.name, count: 0, error })
       }
-    })
+    }
   }
 
-  await saveAllProducts(allProducts)
-  await appendPriceHistory(allProducts)
+  // Append price history only for successfully scraped products
+  if (allScrapedProducts.length > 0) {
+    await appendPriceHistory(allScrapedProducts)
+  }
   
   // Generate weekly insights and update meta
   try {
@@ -76,7 +90,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     success: true,
     scraped: new Date().toISOString(),
-    totalProducts: allProducts.length,
+    totalProducts: allScrapedProducts.length,
     brands: results,
   })
 }
+

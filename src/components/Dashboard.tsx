@@ -42,8 +42,16 @@ export default function Dashboard() {
   const [brandFilter, setBrandFilter] = useState('')
   const [brandDropdownOpen, setBrandDropdownOpen] = useState(false)
   const [brandSearch, setBrandSearch] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const brandDropdownRef = useRef<HTMLDivElement>(null)
+
+  // ── Check if current user is admin ─────────────────────────────────────────
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(data => {
+      setIsAdmin(data.email === 'marwanalyy17@gmail.com')
+    }).catch(() => {})
+  }, [])
 
   // ── Load products ──────────────────────────────────────────────────────────
   const loadProducts = useCallback(async () => {
@@ -438,16 +446,22 @@ export default function Dashboard() {
                         >
                           {name}
                         </button>
+                        {isAdmin && (
                         <button
                           onClick={async (e) => {
                             e.stopPropagation()
                             if (!confirm(`Remove "${name}" and all its products from the dashboard?`)) return
                             try {
-                              await fetch('/api/brands', {
+                              const res = await fetch('/api/brands', {
                                 method: 'DELETE',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ id }),
                               })
+                              if (!res.ok) {
+                                const data = await res.json()
+                                alert(data.error || 'Failed to remove brand')
+                                return
+                              }
                               if (brandFilter === id) setBrandFilter('')
                               loadProducts()
                             } catch {}
@@ -457,6 +471,7 @@ export default function Dashboard() {
                         >
                           <Trash2 size={11} />
                         </button>
+                        )}
                       </div>
                     ))}
                     {filteredBrandList.length === 0 && (

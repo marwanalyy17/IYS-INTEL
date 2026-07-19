@@ -24,12 +24,11 @@ export async function POST(request: Request) {
     const isPasswordCorrect = AUTHORIZED_USERS[normalizedUsername] === password
 
     if (isValidUser && isPasswordCorrect) {
-      // Create a secure session token (in a real app this would be a JWT, but a secure random string works for basic auth)
-      // We'll just set a simple boolean cookie since the middleware just checks for its presence
+      // Store the user's email in the session cookie so we can identify them for permission checks
       
       cookies().set({
         name: 'iys_auth_session',
-        value: 'authenticated',
+        value: normalizedUsername,
         httpOnly: true,
         path: '/',
         secure: process.env.NODE_ENV === 'production',
