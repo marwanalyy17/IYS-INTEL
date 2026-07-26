@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { BRANDS } from '@/lib/brands'
-import { getCustomBrands } from '@/lib/storage'
+import { getCustomBrands, getAllProducts } from '@/lib/storage'
 import { scrapeBrand } from '@/lib/scraper'
-import { upsertBrandProducts, appendPriceHistory, updateMetaInsights } from '@/lib/storage'
+import { saveAllProducts, appendPriceHistory, updateMetaInsights } from '@/lib/storage'
 import { generateInsights } from '@/lib/insights'
 import { ScrapedProduct } from '@/lib/scraper'
 import { Brand } from '@/lib/brands'
@@ -21,7 +21,9 @@ export async function GET(req: NextRequest) {
   }
 
   const results: { brand: string; count: number; error?: string }[] = []
-  const allScrapedProducts: ScrapedProduct[] = []
+
+  // Collect successfully scraped products, keyed by brandId
+  const scrapedByBrand = new Map<string, ScrapedProduct[]>()
 
   // Load custom user-added brands
   let customBrands: Brand[] = []
@@ -43,7 +45,7 @@ export async function GET(req: NextRequest) {
 
   const allBrands = [...BRANDS, ...customBrands]
 
-  // Scrape brands with concurrency limit (5 at a time to avoid rate-limiting)
+  // ── Phase 1: Scrape all brands ──────────────────────────────────────────────
   const CONCURRENCY = 5
   for (let i = 0; i < allBrands.length; i += CONCURRENCY) {
     const batch = allBrands.slice(i, i + CONCURRENCY)
@@ -56,14 +58,7 @@ export async function GET(req: NextRequest) {
       const brand = batch[idx]
 
       if (result.status === 'fulfilled' && result.value.length > 0) {
-        // Only update this brand's products if the scrape returned data.
-        // If a brand's site is down or returns 0, its old data is preserved.
-        try {
-          await upsertBrandProducts(brand.id, result.value)
-        } catch (err) {
-          console.error(`Failed to save products for ${brand.name}:`, err)
-        }
-        allScrapedProducts.push(...result.value)
+        scrapedByBrand.set(brand.id, result.value)
         results.push({ brand: brand.name, count: result.value.length })
       } else {
         const error = result.status === 'rejected'
@@ -74,7 +69,33 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── Phase 2: Merge with existing data (single read) ─────────────────────────
+  // For brands that scraped successfully → use new data
+  // For brands that failed → keep their old data
+  const existingProducts = await getAllProducts()
+
+  const mergedProducts: ScrapedProduct[] = []
+
+  // Keep old products for brands that FAILED to scrape
+  const failedBrandIds = new Set(
+    allBrands.map(b => b.id).filter(id => !scrapedByBrand.has(id))
+  )
+  for (const p of existingProducts) {
+    if (failedBrandIds.has(p.brandId)) {
+      mergedProducts.push(p)
+    }
+  }
+
+  // Add new products for brands that succeeded
+  for (const products of scrapedByBrand.values()) {
+    mergedProducts.push(...products)
+  }
+
+  // ── Phase 3: Single write to Redis ──────────────────────────────────────────
+  await saveAllProducts(mergedProducts)
+
   // Append price history only for successfully scraped products
+  const allScrapedProducts = Array.from(scrapedByBrand.values()).flat()
   if (allScrapedProducts.length > 0) {
     await appendPriceHistory(allScrapedProducts)
   }
@@ -87,11 +108,15 @@ export async function GET(req: NextRequest) {
     console.error('Failed to generate insights:', err)
   }
 
+  const successCount = scrapedByBrand.size
+  const failCount = allBrands.length - successCount
+
   return NextResponse.json({
     success: true,
     scraped: new Date().toISOString(),
-    totalProducts: allScrapedProducts.length,
+    totalProducts: mergedProducts.length,
+    brandsScraped: successCount,
+    brandsKept: failCount,
     brands: results,
   })
 }
-
