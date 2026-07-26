@@ -2,7 +2,13 @@ import Redis from 'ioredis'
 import { gzipSync, gunzipSync } from 'zlib'
 import { ScrapedProduct } from './scraper'
 
-const PRODUCTS_KEY = 'iys:products'
+// ── Per-brand key pattern ─────────────────────────────────────────────────────
+// Each brand's products are stored in their own Redis key: iys:bp:{brandId}
+// This means each brand is fully independent — saving/failing one brand
+// cannot affect any other brand's data.
+
+const BRAND_PRODUCTS_PREFIX = 'iys:bp:'
+const OLD_PRODUCTS_KEY = 'iys:products'  // Legacy single-blob key (for migration)
 const BRANDS_KEY = 'iys:custom_brands'
 const META_KEY = 'iys:meta'
 
@@ -26,39 +32,36 @@ async function withRedis<T>(fn: (client: Redis) => Promise<T>): Promise<T> {
 }
 
 // ── Compressed read/write helpers ─────────────────────────────────────────────
-// Data is gzipped before storage to dramatically reduce Redis memory usage.
-// On read, we try decompression first, then fall back to raw JSON for migration.
+
+function compressedSet(client: Redis, key: string, value: unknown): Promise<'OK'> {
+  const json = JSON.stringify(value)
+  const compressed = gzipSync(json)
+  return client.set(key, compressed) as Promise<'OK'>
+}
+
+function decompressBuffer(raw: Buffer | null): any {
+  if (!raw || raw.length === 0) return null
+  try {
+    return JSON.parse(gunzipSync(raw).toString('utf-8'))
+  } catch {
+    try { return JSON.parse(raw.toString('utf-8')) } catch { return null }
+  }
+}
 
 async function redisGet<T>(key: string): Promise<T | null> {
   return withRedis(async client => {
     const raw = await client.getBuffer(key)
-    if (!raw || raw.length === 0) return null
-
-    // Try decompressing (new gzip format)
-    try {
-      const decompressed = gunzipSync(raw).toString('utf-8')
-      return JSON.parse(decompressed) as T
-    } catch {
-      // Fall back to raw string (old uncompressed format — auto-migrates on next write)
-      return JSON.parse(raw.toString('utf-8')) as T
-    }
+    return decompressBuffer(raw) as T | null
   })
 }
 
 async function redisSet(key: string, value: unknown): Promise<void> {
   return withRedis(async client => {
-    const json = JSON.stringify(value)
-    const compressed = gzipSync(json)
-    // Delete old (possibly uncompressed) value first to free memory before writing.
-    // This is critical for OOM recovery — the old uncompressed blob is much larger.
-    await client.del(key)
-    await client.set(key, compressed)
+    await compressedSet(client, key, value)
   })
 }
 
 // ── Slim product storage ──────────────────────────────────────────────────────
-// Strip redundant per-brand fields before storing. These are re-hydrated on read
-// from the brand config. This cuts ~30% off the JSON size before compression.
 
 interface StoredProduct {
   id: string
@@ -86,7 +89,7 @@ function slimProduct(p: ScrapedProduct): StoredProduct {
     productUrl: p.productUrl,
     imageUrl: p.imageUrl,
     category: p.category,
-    tags: p.tags.length > 20 ? p.tags.slice(0, 20) : p.tags, // cap tags to save space
+    tags: p.tags.length > 20 ? p.tags.slice(0, 20) : p.tags,
     scrapedAt: p.scrapedAt,
   }
   if (p.compareAtPrice) slim.compareAtPrice = p.compareAtPrice
@@ -95,26 +98,10 @@ function slimProduct(p: ScrapedProduct): StoredProduct {
   return slim
 }
 
-// ── Brand config lookup (import dynamically to avoid circular deps) ───────────
-
-let _brandsCache: Map<string, any> | null = null
-
-async function getBrandConfig(brandId: string): Promise<any | null> {
-  if (!_brandsCache) {
-    // Lazy-load to avoid circular imports
-    const { BRANDS } = await import('./brands')
-    const customBrands = await getCustomBrands()
-    _brandsCache = new Map()
-    for (const b of BRANDS) _brandsCache.set(b.id, b)
-    for (const b of customBrands) _brandsCache.set(b.id, b)
-  }
-  return _brandsCache.get(brandId) ?? null
-}
-
 function hydrateProduct(slim: StoredProduct): ScrapedProduct {
   return {
     ...slim,
-    brandName: '',   // Will be enriched by the API layer or brand config
+    brandName: '',
     brandUrl: '',
     tier: 'mid',
     threat: 'm',
@@ -122,82 +109,174 @@ function hydrateProduct(slim: StoredProduct): ScrapedProduct {
   }
 }
 
-// ── Products ──────────────────────────────────────────────────────────────────
+// ── Products (per-brand storage) ──────────────────────────────────────────────
 
+/**
+ * Save products for a SINGLE brand. This is the core write operation.
+ * Each brand is stored in its own Redis key, so one brand's save
+ * cannot corrupt or affect any other brand.
+ */
+export async function saveBrandProducts(brandId: string, products: ScrapedProduct[]): Promise<void> {
+  const slimmed = products.map(slimProduct)
+  await withRedis(async client => {
+    await compressedSet(client, `${BRAND_PRODUCTS_PREFIX}${brandId}`, slimmed)
+  })
+}
+
+/**
+ * Get ALL products across all brands by reading each brand's key.
+ * Also handles migration from the old single-blob format.
+ */
 export async function getAllProducts(): Promise<ScrapedProduct[]> {
   try {
-    const data = await redisGet<(ScrapedProduct | StoredProduct)[]>(PRODUCTS_KEY)
-    if (!data) return []
-    
-    // Handle both old (full) and new (slim) formats
-    return data.map(p => {
-      // If it has brandName, it's already a full ScrapedProduct
-      if ('brandName' in p && (p as any).brandName) return p as ScrapedProduct
-      // Otherwise hydrate the slim version
-      return hydrateProduct(p as StoredProduct)
+    return await withRedis(async client => {
+      // Find all per-brand keys
+      const keys = await client.keys(`${BRAND_PRODUCTS_PREFIX}*`)
+
+      // If no per-brand keys exist, check for legacy single-blob key and migrate
+      if (keys.length === 0) {
+        const oldRaw = await client.getBuffer(OLD_PRODUCTS_KEY)
+        const oldData = decompressBuffer(oldRaw) as (ScrapedProduct | StoredProduct)[] | null
+        if (oldData && oldData.length > 0) {
+          // Migrate: split by brand and save individually
+          const byBrand = new Map<string, (ScrapedProduct | StoredProduct)[]>()
+          for (const p of oldData) {
+            const arr = byBrand.get(p.brandId) || []
+            arr.push(p)
+            byBrand.set(p.brandId, arr)
+          }
+          for (const [bid, products] of byBrand) {
+            const slimmed = products.map(p => slimProduct(p as ScrapedProduct))
+            await compressedSet(client, `${BRAND_PRODUCTS_PREFIX}${bid}`, slimmed)
+          }
+          // Delete old key after successful migration
+          await client.del(OLD_PRODUCTS_KEY)
+
+          return oldData.map(p => {
+            if ('brandName' in p && (p as any).brandName) return p as ScrapedProduct
+            return hydrateProduct(p as StoredProduct)
+          })
+        }
+        return []
+      }
+
+      // Read all per-brand keys in one pipeline
+      const pipeline = client.pipeline()
+      keys.forEach(k => pipeline.getBuffer(k))
+      const results = await pipeline.exec()
+
+      const allProducts: ScrapedProduct[] = []
+      results?.forEach(([err, raw]) => {
+        if (err || !raw) return
+        const products = decompressBuffer(raw as Buffer) as StoredProduct[] | null
+        if (products) {
+          for (const p of products) {
+            if ('brandName' in p && (p as any).brandName) {
+              allProducts.push(p as unknown as ScrapedProduct)
+            } else {
+              allProducts.push(hydrateProduct(p))
+            }
+          }
+        }
+      })
+
+      return allProducts
     })
   } catch {
     return []
   }
 }
 
-export async function saveAllProducts(products: ScrapedProduct[]): Promise<void> {
-  const existing = await getAllProducts()
-  const existingMap = new Map(existing.map(p => [`${p.brandId}:${p.id}`, p]))
+export async function getProductsByBrand(brandId: string): Promise<ScrapedProduct[]> {
+  try {
+    const data = await redisGet<StoredProduct[]>(`${BRAND_PRODUCTS_PREFIX}${brandId}`)
+    if (!data) return []
+    return data.map(p => {
+      if ('brandName' in p && (p as any).brandName) return p as unknown as ScrapedProduct
+      return hydrateProduct(p)
+    })
+  } catch {
+    return []
+  }
+}
 
-  const merged = products.map(p => {
-    const prev = existingMap.get(`${p.brandId}:${p.id}`)
-    return {
-      ...p,
-      firstDiscoveredAt: prev?.firstDiscoveredAt || prev?.scrapedAt || p.scrapedAt
+/**
+ * Save/replace products for one brand. This is now just an alias for saveBrandProducts.
+ * No need to read-all-filter-write-all anymore!
+ */
+export async function upsertBrandProducts(brandId: string, newProducts: ScrapedProduct[]): Promise<void> {
+  await saveBrandProducts(brandId, newProducts)
+}
+
+/**
+ * Remove a brand's products and price history.
+ */
+export async function removeBrandProducts(brandId: string): Promise<void> {
+  await withRedis(async client => {
+    // Delete the brand's product key
+    await client.del(`${BRAND_PRODUCTS_PREFIX}${brandId}`)
+
+    // Clean up price history keys
+    const historyKeys = await client.keys(`iys:history:${brandId}:*`)
+    if (historyKeys.length > 0) {
+      const pipeline = client.pipeline()
+      historyKeys.forEach(k => pipeline.del(k))
+      await pipeline.exec()
+    }
+  })
+}
+
+/**
+ * Legacy function kept for compatibility. Groups products by brand and saves each.
+ */
+export async function saveAllProducts(products: ScrapedProduct[]): Promise<void> {
+  const byBrand = new Map<string, ScrapedProduct[]>()
+  for (const p of products) {
+    const arr = byBrand.get(p.brandId) || []
+    arr.push(p)
+    byBrand.set(p.brandId, arr)
+  }
+
+  await withRedis(async client => {
+    for (const [brandId, brandProducts] of byBrand) {
+      const slimmed = brandProducts.map(slimProduct)
+      await compressedSet(client, `${BRAND_PRODUCTS_PREFIX}${brandId}`, slimmed)
     }
   })
 
-  // Store slimmed-down versions to save memory
-  const slimmed = merged.map(slimProduct)
-  await redisSet(PRODUCTS_KEY, slimmed)
-
-  const prevMeta = await getMeta()
-  
-  await redisSet(META_KEY, {
-    lastScraped: new Date().toISOString(),
-    totalProducts: merged.length,
-    brandCount: new Set(merged.map(p => p.brandId)).size,
-    insights: prevMeta.insights || [],
-  })
+  await updateMetaCounts()
 }
 
-export async function getProductsByBrand(brandId: string): Promise<ScrapedProduct[]> {
-  const all = await getAllProducts()
-  return all.filter(p => p.brandId === brandId)
-}
-
-export async function upsertBrandProducts(brandId: string, newProducts: ScrapedProduct[]): Promise<void> {
-  const all = await getAllProducts()
-  const others = all.filter(p => p.brandId !== brandId)
-  await saveAllProducts([...others, ...newProducts])
-}
-
-export async function removeBrandProducts(brandId: string): Promise<void> {
-  // Remove products from the main store
-  const all = await getAllProducts()
-  const remaining = all.filter(p => p.brandId !== brandId)
-  
-  // Get the IDs of products being removed so we can clean up their history keys
-  const removedProducts = all.filter(p => p.brandId === brandId)
-  
-  // Save the remaining products (this also updates meta counts)
-  await saveAllProducts(remaining)
-  
-  // Clean up price history keys for removed products
-  if (removedProducts.length > 0) {
+/**
+ * Update the meta key with current product/brand counts.
+ */
+export async function updateMetaCounts(): Promise<void> {
+  try {
     await withRedis(async client => {
-      const pipeline = client.pipeline()
-      for (const p of removedProducts) {
-        pipeline.del(`iys:history:${p.brandId}:${p.id}`)
+      const keys = await client.keys(`${BRAND_PRODUCTS_PREFIX}*`)
+      let totalProducts = 0
+
+      if (keys.length > 0) {
+        const pipeline = client.pipeline()
+        keys.forEach(k => pipeline.getBuffer(k))
+        const results = await pipeline.exec()
+        results?.forEach(([err, raw]) => {
+          if (err || !raw) return
+          const products = decompressBuffer(raw as Buffer) as StoredProduct[] | null
+          if (products) totalProducts += products.length
+        })
       }
-      await pipeline.exec()
+
+      const prevMeta = await getMeta()
+      await compressedSet(client, META_KEY, {
+        lastScraped: new Date().toISOString(),
+        totalProducts,
+        brandCount: keys.length,
+        insights: prevMeta.insights || [],
+      })
     })
+  } catch (err) {
+    console.error('Failed to update meta counts:', err)
   }
 }
 
@@ -210,7 +289,6 @@ export interface PriceHistoryEntry {
   priceDelta: number
 }
 
-// Max history entries per product (reduced from 365 to save memory)
 const MAX_HISTORY_ENTRIES = 60
 
 export async function appendPriceHistory(products: ScrapedProduct[]): Promise<void> {
@@ -245,7 +323,6 @@ export async function appendPriceHistory(products: ScrapedProduct[]): Promise<vo
         priceDelta
       })
       
-      // Cap history to save memory
       if (history.length > MAX_HISTORY_ENTRIES) {
         history = history.slice(-MAX_HISTORY_ENTRIES)
       }

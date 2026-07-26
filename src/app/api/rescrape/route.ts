@@ -1,30 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { BRANDS } from '@/lib/brands'
-import { getCustomBrands, getAllProducts, saveAllProducts, appendPriceHistory } from '@/lib/storage'
+import { getCustomBrands, saveBrandProducts, appendPriceHistory, updateMetaCounts } from '@/lib/storage'
 import { scrapeBrand } from '@/lib/scraper'
 import { ScrapedProduct } from '@/lib/scraper'
 import { Brand } from '@/lib/brands'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 300  // 5 minutes (Pro plan max)
 
 /**
  * Manual rescrape endpoint — triggered by the dashboard Rescrape button.
- * Requires an authenticated session (no cron secret needed).
- * Uses the same non-destructive 3-phase approach as the cron.
+ * Saves each brand IMMEDIATELY after scraping it, so even if the function
+ * times out, all brands scraped so far are safely stored.
  */
 export async function POST(req: NextRequest) {
-  // Require authenticated session
   const session = cookies().get('iys_auth_session')
   if (!session?.value) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const results: { brand: string; count: number; error?: string }[] = []
-  const scrapedByBrand = new Map<string, ScrapedProduct[]>()
+  const allScrapedProducts: ScrapedProduct[] = []
 
-  // Load custom user-added brands
   let customBrands: Brand[] = []
   try {
     const customs = await getCustomBrands()
@@ -44,7 +42,7 @@ export async function POST(req: NextRequest) {
 
   const allBrands = [...BRANDS, ...customBrands]
 
-  // Phase 1: Scrape all brands
+  // Scrape in batches of 5, save each brand IMMEDIATELY after success
   const CONCURRENCY = 5
   for (let i = 0; i < allBrands.length; i += CONCURRENCY) {
     const batch = allBrands.slice(i, i + CONCURRENCY)
@@ -57,47 +55,38 @@ export async function POST(req: NextRequest) {
       const brand = batch[idx]
 
       if (result.status === 'fulfilled' && result.value.length > 0) {
-        scrapedByBrand.set(brand.id, result.value)
-        results.push({ brand: brand.name, count: result.value.length })
+        try {
+          // Save THIS brand's products immediately — completely independent of other brands
+          await saveBrandProducts(brand.id, result.value)
+          allScrapedProducts.push(...result.value)
+          results.push({ brand: brand.name, count: result.value.length })
+        } catch (err) {
+          results.push({ brand: brand.name, count: 0, error: `Save failed: ${err}` })
+        }
       } else {
         const error = result.status === 'rejected'
           ? String(result.reason)
           : 'Returned 0 products'
         results.push({ brand: brand.name, count: 0, error })
+        // Brand's OLD data remains untouched in its own Redis key
       }
     }
   }
 
-  // Phase 2: Merge — keep old data for failed brands
-  const existingProducts = await getAllProducts()
-  const mergedProducts: ScrapedProduct[] = []
-
-  const failedBrandIds = new Set(
-    allBrands.map(b => b.id).filter(id => !scrapedByBrand.has(id))
-  )
-  for (const p of existingProducts) {
-    if (failedBrandIds.has(p.brandId)) {
-      mergedProducts.push(p)
-    }
-  }
-  for (const products of scrapedByBrand.values()) {
-    mergedProducts.push(...products)
-  }
-
-  // Phase 3: Single write
-  await saveAllProducts(mergedProducts)
-
-  const allScrapedProducts = Array.from(scrapedByBrand.values()).flat()
+  // Append price history for successfully scraped products
   if (allScrapedProducts.length > 0) {
-    await appendPriceHistory(allScrapedProducts)
+    try { await appendPriceHistory(allScrapedProducts) } catch {}
   }
+
+  // Update meta counts
+  try { await updateMetaCounts() } catch {}
 
   return NextResponse.json({
     success: true,
     scraped: new Date().toISOString(),
-    totalProducts: mergedProducts.length,
-    brandsScraped: scrapedByBrand.size,
-    brandsKept: failedBrandIds.size,
+    totalProducts: allScrapedProducts.length,
+    brandsScraped: results.filter(r => r.count > 0).length,
+    brandsFailed: results.filter(r => r.count === 0).length,
     brands: results,
   })
 }
