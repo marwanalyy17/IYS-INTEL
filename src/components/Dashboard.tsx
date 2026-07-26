@@ -82,10 +82,14 @@ export default function Dashboard() {
   const triggerScrape = async () => {
     setScraping(true)
     try {
-      await fetch('/api/cron/scrape', {
-        headers: { Authorization: `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET ?? ''}` },
-      })
+      const res = await fetch('/api/rescrape', { method: 'POST' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Scrape failed')
+      }
       await loadProducts()
+    } catch (err) {
+      setError('Scrape request failed')
     } finally {
       setScraping(false)
     }
