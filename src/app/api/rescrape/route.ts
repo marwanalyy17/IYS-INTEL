@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { BRANDS } from '@/lib/brands'
-import { getCustomBrands, saveBrandProducts, appendPriceHistory, updateMetaCounts } from '@/lib/storage'
+import { getCustomBrands, saveBrandProducts, appendPriceHistory, updateMetaCounts, updateMetaInsights } from '@/lib/storage'
 import { scrapeBrand } from '@/lib/scraper'
+import { generateInsights } from '@/lib/insights'
 import { ScrapedProduct } from '@/lib/scraper'
 import { Brand } from '@/lib/brands'
 
@@ -80,6 +81,12 @@ export async function POST(req: NextRequest) {
 
   // Update meta counts
   try { await updateMetaCounts() } catch {}
+
+  // Generate weekly insights
+  try {
+    const insights = await generateInsights()
+    await updateMetaInsights(insights)
+  } catch {}
 
   return NextResponse.json({
     success: true,
