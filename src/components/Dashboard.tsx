@@ -19,6 +19,7 @@ interface Meta {
   lastScraped: string | null
   totalProducts: number
   brandCount: number
+  insights?: string[]
 }
 
 type SortKey = 'relevance' | 'price-asc' | 'price-desc' | 'brand' | 'threat'
@@ -26,7 +27,7 @@ type ViewMode = 'table' | 'grid'
 
 export default function Dashboard() {
   const [products, setProducts] = useState<ScrapedProduct[]>([])
-  const [meta, setMeta] = useState<Meta>({ lastScraped: null, totalProducts: 0, brandCount: 0 })
+  const [meta, setMeta] = useState<Meta>({ lastScraped: null, totalProducts: 0, brandCount: 0, insights: [] })
   const [filtered, setFiltered] = useState<ScrapedProduct[]>([])
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -62,7 +63,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error('Failed to load')
       const { products: prods, meta: m } = await res.json()
       setProducts(prods ?? [])
-      setMeta(m ?? { lastScraped: null, totalProducts: 0, brandCount: 0 })
+      setMeta(m ?? { lastScraped: null, totalProducts: 0, brandCount: 0, insights: [] })
     } catch {
       setError('Could not load products. Check your connection.')
     } finally {
@@ -345,11 +346,11 @@ export default function Dashboard() {
       </div>
 
       {/* ── Weekly Insights ── */}
-      {(meta as any).insights && (meta as any).insights.length > 0 && (
+      {meta.insights && meta.insights.length > 0 && (
         <div className="px-4 py-2 bg-surface flex items-center gap-3 border-b border-white/[0.07] flex-shrink-0 overflow-x-auto no-scrollbar">
           <span className="text-[9px] text-accent uppercase tracking-widest whitespace-nowrap font-semibold">Weekly Insights</span>
           <div className="flex gap-4">
-            {(meta as any).insights.map((insight: string, idx: number) => (
+            {meta.insights.map((insight: string, idx: number) => (
               <div key={idx} className="flex items-center gap-1.5 text-[11px] text-white/70 whitespace-nowrap bg-white/[0.03] px-2.5 py-1 rounded-md border border-white/[0.05]">
                 <span className="w-1.5 h-1.5 rounded-full bg-accent/60"></span>
                 {insight}

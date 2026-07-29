@@ -249,6 +249,7 @@ export async function saveAllProducts(products: ScrapedProduct[]): Promise<void>
 
 /**
  * Update the meta key with current product/brand counts.
+ * Reads the existing meta directly on the same connection to preserve insights.
  */
 export async function updateMetaCounts(): Promise<void> {
   try {
@@ -267,12 +268,15 @@ export async function updateMetaCounts(): Promise<void> {
         })
       }
 
-      const prevMeta = await getMeta()
+      // Read existing meta on the SAME client to preserve insights
+      const metaRaw = await client.getBuffer(META_KEY)
+      const prevMeta = decompressBuffer(metaRaw) as ScrapeMeta | null
+
       await compressedSet(client, META_KEY, {
         lastScraped: new Date().toISOString(),
         totalProducts,
         brandCount: keys.length,
-        insights: prevMeta.insights || [],
+        insights: prevMeta?.insights || [],
       })
     })
   } catch (err) {
