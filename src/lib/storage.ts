@@ -383,9 +383,12 @@ export async function getMeta(): Promise<ScrapeMeta> {
 }
 
 export async function updateMetaInsights(insights: string[]): Promise<void> {
-  const meta = await getMeta()
-  meta.insights = insights
-  await redisSet(META_KEY, meta)
+  await withRedis(async client => {
+    const metaRaw = await client.getBuffer(META_KEY)
+    const meta = (decompressBuffer(metaRaw) as ScrapeMeta | null) ?? { lastScraped: null, totalProducts: 0, brandCount: 0 }
+    ;(meta as any).insights = insights
+    await compressedSet(client, META_KEY, meta)
+  })
 }
 
 // ── Custom brands (user-added) ────────────────────────────────────────────────

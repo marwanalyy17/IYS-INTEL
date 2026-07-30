@@ -1,4 +1,4 @@
-import { getAllProducts, getBrandPriceHistory } from './storage'
+import { getAllProducts, getBrandPriceHistory, getCustomBrands } from './storage'
 import { BRANDS } from './brands'
 
 interface Event {
@@ -10,6 +10,12 @@ export async function generateInsights(): Promise<string[]> {
   const events: Event[] = []
   const allProducts = await getAllProducts()
   
+  // Build brand lookup (hardcoded + custom) for currency and name
+  const customBrands = await getCustomBrands()
+  const brandLookup = new Map<string, { name: string; currency: string }>()
+  for (const b of BRANDS) brandLookup.set(b.id, { name: b.name, currency: b.currency || 'EGP' })
+  for (const b of customBrands) brandLookup.set(b.id, { name: b.name, currency: b.currency || 'EGP' })
+
   // Group products by brand
   const brandMap = new Map<string, typeof allProducts>()
   for (const p of allProducts) {
@@ -20,14 +26,56 @@ export async function generateInsights(): Promise<string[]> {
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
   const now = Date.now()
 
-  // 1. Detect New Product Drops
+  // Helper to get brand name
+  const getBrandName = (brandId: string) => {
+    return brandLookup.get(brandId)?.name || allProducts.find(p => p.brandId === brandId)?.brandName || brandId
+  }
+  const isLocalBrand = (brandId: string) => {
+    const currency = brandLookup.get(brandId)?.currency || 'EGP'
+    return currency === 'EGP'
+  }
+
+  // ── 1. Detect Active Sales (compareAtPrice > price) ──────────────────────
   for (const [brandId, products] of brandMap.entries()) {
-    const brandCurrency = BRANDS.find(b => b.id === brandId)?.currency || products[0]?.currency || 'EGP'
-    if (brandCurrency !== 'EGP') continue // Only track local brands
+    if (!isLocalBrand(brandId)) continue
+    const brandName = getBrandName(brandId)
+
+    const saleByCategory = new Map<string, number>()
+    let totalSaleItems = 0
+
+    for (const p of products) {
+      if (p.compareAtPrice && p.compareAtPrice > p.price && p.price > 0) {
+        totalSaleItems++
+        const cat = p.category || 'variable'
+        saleByCategory.set(cat, (saleByCategory.get(cat) || 0) + 1)
+      }
+    }
+
+    if (totalSaleItems >= 5) {
+      // Find the dominant category
+      let biggestCat = ''
+      let biggestCount = 0
+      for (const [cat, count] of saleByCategory) {
+        if (count > biggestCount) { biggestCount = count; biggestCat = cat }
+      }
+
+      // If most sale items are one category, mention it; otherwise say "across their collection"
+      const categoryText = (biggestCount > totalSaleItems * 0.5 && biggestCat)
+        ? ` in their ${biggestCat} collection`
+        : ' across their collection'
+
+      events.push({
+        score: totalSaleItems * 15,
+        text: `${brandName} launched a sale on ${totalSaleItems} items${categoryText}.`
+      })
+    }
+  }
+
+  // ── 2. Detect New Product Drops ──────────────────────────────────────────
+  for (const [brandId, products] of brandMap.entries()) {
+    if (!isLocalBrand(brandId)) continue
+    const brandName = getBrandName(brandId)
     
-    const brandName = products[0]?.brandName || brandId
-    
-    // Group new products by category
     const newByCategory = new Map<string, number>()
     for (const p of products) {
       if (!p.firstDiscoveredAt) continue
@@ -37,41 +85,34 @@ export async function generateInsights(): Promise<string[]> {
       }
     }
 
-    // Generate events for categories with multiple new items
     for (const [category, count] of newByCategory.entries()) {
-      if (count >= 2 && count <= 20) { // Ignore >20 as it's likely a first-time scrape anomaly
+      if (count >= 2 && count <= 20) {
         events.push({
-          score: count * 10, // Weight new products
+          score: count * 10,
           text: `${brandName} introduced ${count} new ${category} to their catalog.`
         })
       }
     }
   }
 
-  // 2. Detect Sales / Price Drops
+  // ── 3. Detect Price Drops via History ─────────────────────────────────────
   for (const brandId of brandMap.keys()) {
-    const brandCurrency = BRANDS.find(b => b.id === brandId)?.currency || 'EGP'
-    if (brandCurrency !== 'EGP') continue // Only track local brands
+    if (!isLocalBrand(brandId)) continue
+    const brandName = getBrandName(brandId)
 
     try {
       const history = await getBrandPriceHistory(brandId)
-      const brandName = allProducts.find(p => p.brandId === brandId)?.brandName || brandId
-      
       const dropsByCategory = new Map<string, number>()
 
       for (const ph of history) {
         const prod = allProducts.find(p => p.id === ph.productId)
         if (!prod) continue
 
-        // Check recent history for drops
         for (const entry of ph.history) {
           if (!entry.priceChanged || entry.priceDelta >= 0) continue
           const entryDate = new Date(entry.date).getTime()
           
           if (now - entryDate < SEVEN_DAYS_MS) {
-            // Price dropped!
-            // Ensure the drop is somewhat significant (e.g., > 5%)
-            // We use previous price = entry.price - entry.priceDelta
             const prevPrice = entry.price - entry.priceDelta
             const dropPercent = Math.abs(entry.priceDelta / prevPrice)
             if (dropPercent > 0.05) {
@@ -85,8 +126,8 @@ export async function generateInsights(): Promise<string[]> {
         if (count >= 2) {
           const categoryText = category ? ` in their ${category} collection` : ' across their collection'
           events.push({
-            score: count * 15, // Weight sales slightly higher than new products
-            text: `${brandName} launched a sale on ${count} items${categoryText}.`
+            score: count * 12,
+            text: `${brandName} dropped prices on ${count} items${categoryText}.`
           })
         }
       }
@@ -95,14 +136,12 @@ export async function generateInsights(): Promise<string[]> {
     }
   }
 
-  // 3. Strategic Market Positioning (Volume & Pricing)
-  // Group all local products by category, then by brand
+  // ── 4. Strategic Market Positioning ───────────────────────────────────────
   const categoryStats = new Map<string, Map<string, { count: number, totalPrice: number }>>()
   
   for (const p of allProducts) {
     if (!p.category || !p.price) continue
-    const brandCurrency = BRANDS.find(b => b.id === p.brandId)?.currency || p.currency || 'EGP'
-    if (brandCurrency !== 'EGP') continue
+    if (!isLocalBrand(p.brandId)) continue
 
     if (!categoryStats.has(p.category)) categoryStats.set(p.category, new Map())
     const brandMapForCat = categoryStats.get(p.category)!
@@ -113,49 +152,27 @@ export async function generateInsights(): Promise<string[]> {
     stats.totalPrice += p.price
   }
 
-  // Generate strategic positioning insights
   for (const [category, brandsInCat] of categoryStats.entries()) {
-    // Only analyze categories with decent representation
     if (brandsInCat.size < 3) continue
 
     let maxVolBrand = '', maxVol = 0
-    let maxAvgPriceBrand = '', maxAvgPrice = 0
-    let minAvgPriceBrand = '', minAvgPrice = Infinity
 
     for (const [brandId, stats] of brandsInCat.entries()) {
-      const avgPrice = stats.totalPrice / stats.count
       if (stats.count > maxVol) { maxVol = stats.count; maxVolBrand = brandId }
-      // Only consider pricing extremes if they have at least 3 products in the category to avoid outliers
-      if (stats.count >= 3) {
-        if (avgPrice > maxAvgPrice) { maxAvgPrice = avgPrice; maxAvgPriceBrand = brandId }
-        if (avgPrice < minAvgPrice) { minAvgPrice = avgPrice; minAvgPriceBrand = brandId }
-      }
     }
-
-    const getBrandName = (id: string) => allProducts.find(p => p.brandId === id)?.brandName || id
 
     if (maxVol >= 15) {
       events.push({
-        score: maxVol * 2, // Volume dominance
+        score: maxVol * 2,
         text: `${getBrandName(maxVolBrand)} currently dominates the ${category} market by volume (${maxVol} active products).`
-      })
-    }
-
-    // High premium insight
-    if (maxAvgPriceBrand && maxAvgPrice > 2000) {
-      events.push({
-        score: 15,
-        text: `${getBrandName(maxAvgPriceBrand)} commands the highest market premium for ${category}, averaging ${Math.round(maxAvgPrice).toLocaleString()} EGP.`
       })
     }
   }
 
-  // Sort by score descending, take top 3
+  // Sort by score descending, take top 5, deduplicate
   events.sort((a, b) => b.score - a.score)
-  // Deduplicate text in case of identical insights
-  const topEvents = Array.from(new Set(events.map(e => e.text))).slice(0, 3)
+  const topEvents = Array.from(new Set(events.map(e => e.text))).slice(0, 5)
 
-  // Fallback if nothing happened
   if (topEvents.length === 0) {
     topEvents.push("Market is currently stable. Keep monitoring for new drops and sales.")
   }
