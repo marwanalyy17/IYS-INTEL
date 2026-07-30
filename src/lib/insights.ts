@@ -9,16 +9,21 @@ interface Event {
 export async function generateInsights(): Promise<string[]> {
   const events: Event[] = []
   const allProducts = await getAllProducts()
-  
-  // Build brand lookup (hardcoded + custom) for currency and name
+  if (!allProducts.length) return ["No product data yet. Run a scrape to populate the dashboard."]
+
+  // Build brand lookup (hardcoded + custom)
   const customBrands = await getCustomBrands()
   const brandLookup = new Map<string, { name: string; currency: string }>()
   for (const b of BRANDS) brandLookup.set(b.id, { name: b.name, currency: b.currency || 'EGP' })
   for (const b of customBrands) brandLookup.set(b.id, { name: b.name, currency: b.currency || 'EGP' })
 
-  // Group products by brand
+  const getBrandName = (id: string) => brandLookup.get(id)?.name || id
+  const isLocal = (id: string) => (brandLookup.get(id)?.currency || 'EGP') === 'EGP'
+
+  // Group products by brand (local only)
   const brandMap = new Map<string, typeof allProducts>()
   for (const p of allProducts) {
+    if (!isLocal(p.brandId)) continue
     if (!brandMap.has(p.brandId)) brandMap.set(p.brandId, [])
     brandMap.get(p.brandId)!.push(p)
   }
@@ -26,150 +31,142 @@ export async function generateInsights(): Promise<string[]> {
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
   const now = Date.now()
 
-  // Helper to get brand name
-  const getBrandName = (brandId: string) => {
-    return brandLookup.get(brandId)?.name || allProducts.find(p => p.brandId === brandId)?.brandName || brandId
-  }
-  const isLocalBrand = (brandId: string) => {
-    const currency = brandLookup.get(brandId)?.currency || 'EGP'
-    return currency === 'EGP'
-  }
-
-  // ── 1. Detect Active Sales (compareAtPrice > price) ──────────────────────
-  for (const [brandId, products] of brandMap.entries()) {
-    if (!isLocalBrand(brandId)) continue
-    const brandName = getBrandName(brandId)
-
-    const saleByCategory = new Map<string, number>()
-    let totalSaleItems = 0
-
+  // ── 1. Active Sales (compareAtPrice > price) ────────────────────────────
+  for (const [brandId, products] of brandMap) {
+    let saleCount = 0
     for (const p of products) {
-      if (p.compareAtPrice && p.compareAtPrice > p.price && p.price > 0) {
-        totalSaleItems++
-        const cat = p.category || 'variable'
-        saleByCategory.set(cat, (saleByCategory.get(cat) || 0) + 1)
-      }
+      if (p.compareAtPrice && p.compareAtPrice > p.price && p.price > 0) saleCount++
     }
-
-    if (totalSaleItems >= 5) {
-      // Find the dominant category
-      let biggestCat = ''
-      let biggestCount = 0
-      for (const [cat, count] of saleByCategory) {
-        if (count > biggestCount) { biggestCount = count; biggestCat = cat }
-      }
-
-      // If most sale items are one category, mention it; otherwise say "across their collection"
-      const categoryText = (biggestCount > totalSaleItems * 0.5 && biggestCat)
-        ? ` in their ${biggestCat} collection`
-        : ' across their collection'
-
+    if (saleCount >= 5) {
+      const pct = Math.round((saleCount / products.length) * 100)
       events.push({
-        score: totalSaleItems * 15,
-        text: `${brandName} launched a sale on ${totalSaleItems} items${categoryText}.`
+        score: saleCount * 12,
+        text: `${getBrandName(brandId)} has ${saleCount} items on sale (${pct}% of catalog).`
       })
     }
   }
 
-  // ── 2. Detect New Product Drops ──────────────────────────────────────────
-  for (const [brandId, products] of brandMap.entries()) {
-    if (!isLocalBrand(brandId)) continue
-    const brandName = getBrandName(brandId)
-    
-    const newByCategory = new Map<string, number>()
+  // ── 2. New Product Drops (discovered in the last 7 days) ────────────────
+  for (const [brandId, products] of brandMap) {
+    let newCount = 0
     for (const p of products) {
-      if (!p.firstDiscoveredAt) continue
-      const discoveredDate = new Date(p.firstDiscoveredAt).getTime()
-      if (now - discoveredDate < SEVEN_DAYS_MS) {
-        newByCategory.set(p.category, (newByCategory.get(p.category) || 0) + 1)
+      if (p.firstDiscoveredAt) {
+        const d = new Date(p.firstDiscoveredAt).getTime()
+        if (now - d < SEVEN_DAYS_MS) newCount++
       }
     }
-
-    for (const [category, count] of newByCategory.entries()) {
-      if (count >= 2 && count <= 20) {
-        events.push({
-          score: count * 10,
-          text: `${brandName} introduced ${count} new ${category} to their catalog.`
-        })
-      }
+    if (newCount >= 3 && newCount <= 50) {
+      events.push({
+        score: newCount * 10,
+        text: `${getBrandName(brandId)} added ${newCount} new products this week.`
+      })
     }
   }
 
-  // ── 3. Detect Price Drops via History ─────────────────────────────────────
+  // ── 3. Price Drops & Increases via History ──────────────────────────────
   for (const brandId of brandMap.keys()) {
-    if (!isLocalBrand(brandId)) continue
-    const brandName = getBrandName(brandId)
-
     try {
       const history = await getBrandPriceHistory(brandId)
-      const dropsByCategory = new Map<string, number>()
-
+      let drops = 0, increases = 0
       for (const ph of history) {
-        const prod = allProducts.find(p => p.id === ph.productId)
-        if (!prod) continue
-
         for (const entry of ph.history) {
-          if (!entry.priceChanged || entry.priceDelta >= 0) continue
+          if (!entry.priceChanged) continue
           const entryDate = new Date(entry.date).getTime()
-          
           if (now - entryDate < SEVEN_DAYS_MS) {
             const prevPrice = entry.price - entry.priceDelta
-            const dropPercent = Math.abs(entry.priceDelta / prevPrice)
-            if (dropPercent > 0.05) {
-              dropsByCategory.set(prod.category, (dropsByCategory.get(prod.category) || 0) + 1)
+            if (prevPrice > 0 && Math.abs(entry.priceDelta / prevPrice) > 0.05) {
+              if (entry.priceDelta < 0) drops++
+              else increases++
             }
           }
         }
       }
-
-      for (const [category, count] of dropsByCategory.entries()) {
-        if (count >= 2) {
-          const categoryText = category ? ` in their ${category} collection` : ' across their collection'
-          events.push({
-            score: count * 12,
-            text: `${brandName} dropped prices on ${count} items${categoryText}.`
-          })
-        }
+      if (drops >= 3) {
+        events.push({
+          score: drops * 10,
+          text: `${getBrandName(brandId)} dropped prices on ${drops} products this week.`
+        })
       }
-    } catch (err) {
-      console.error(`Error analyzing price history for ${brandId}:`, err)
-    }
+      if (increases >= 3) {
+        events.push({
+          score: increases * 10,
+          text: `${getBrandName(brandId)} raised prices on ${increases} products this week.`
+        })
+      }
+    } catch {}
   }
 
-  // ── 4. Strategic Market Positioning ───────────────────────────────────────
-  const categoryStats = new Map<string, Map<string, { count: number, totalPrice: number }>>()
-  
+  // ── 4. Largest Collections ──────────────────────────────────────────────
+  const brandSizes = Array.from(brandMap.entries())
+    .map(([id, prods]) => ({ id, name: getBrandName(id), count: prods.length }))
+    .sort((a, b) => b.count - a.count)
+
+  if (brandSizes.length >= 3) {
+    const top = brandSizes[0]
+    events.push({
+      score: 20,
+      text: `${top.name} has the largest catalog with ${top.count} active products.`
+    })
+  }
+
+  // ── 5. Category Dominance ──────────────────────────────────────────────
+  const catBrandCount = new Map<string, Map<string, number>>()
   for (const p of allProducts) {
-    if (!p.category || !p.price) continue
-    if (!isLocalBrand(p.brandId)) continue
-
-    if (!categoryStats.has(p.category)) categoryStats.set(p.category, new Map())
-    const brandMapForCat = categoryStats.get(p.category)!
-    
-    if (!brandMapForCat.has(p.brandId)) brandMapForCat.set(p.brandId, { count: 0, totalPrice: 0 })
-    const stats = brandMapForCat.get(p.brandId)!
-    stats.count += 1
-    stats.totalPrice += p.price
+    if (!p.category || !isLocal(p.brandId)) continue
+    if (!catBrandCount.has(p.category)) catBrandCount.set(p.category, new Map())
+    const m = catBrandCount.get(p.category)!
+    m.set(p.brandId, (m.get(p.brandId) || 0) + 1)
   }
 
-  for (const [category, brandsInCat] of categoryStats.entries()) {
-    if (brandsInCat.size < 3) continue
-
-    let maxVolBrand = '', maxVol = 0
-
-    for (const [brandId, stats] of brandsInCat.entries()) {
-      if (stats.count > maxVol) { maxVol = stats.count; maxVolBrand = brandId }
+  for (const [category, brands] of catBrandCount) {
+    if (brands.size < 3) continue
+    let topBrand = '', topCount = 0
+    for (const [bid, count] of brands) {
+      if (count > topCount) { topCount = count; topBrand = bid }
     }
-
-    if (maxVol >= 15) {
+    if (topCount >= 15) {
       events.push({
-        score: maxVol * 2,
-        text: `${getBrandName(maxVolBrand)} currently dominates the ${category} market by volume (${maxVol} active products).`
+        score: topCount * 2,
+        text: `${getBrandName(topBrand)} leads the ${category} category with ${topCount} products.`
       })
     }
   }
 
-  // Sort by score descending, take top 5, deduplicate
+  // ── 6. Most Contested Categories ───────────────────────────────────────
+  const catCompetition = Array.from(catBrandCount.entries())
+    .map(([cat, brands]) => ({ cat, brandCount: brands.size, totalProducts: Array.from(brands.values()).reduce((a, b) => a + b, 0) }))
+    .sort((a, b) => b.brandCount - a.brandCount)
+
+  if (catCompetition.length > 0) {
+    const top = catCompetition[0]
+    if (top.brandCount >= 5) {
+      events.push({
+        score: top.brandCount * 5,
+        text: `${top.cat} is the most competitive category with ${top.brandCount} brands and ${top.totalProducts} products.`
+      })
+    }
+  }
+
+  // ── 7. Premium Positioning ─────────────────────────────────────────────
+  const brandAvgPrices = Array.from(brandMap.entries()).map(([id, prods]) => {
+    const validPrices = prods.filter(p => p.price > 0)
+    const avg = validPrices.length > 0
+      ? validPrices.reduce((s, p) => s + p.price, 0) / validPrices.length
+      : 0
+    return { id, name: getBrandName(id), avg, count: validPrices.length }
+  }).filter(b => b.count >= 5)
+
+  if (brandAvgPrices.length >= 3) {
+    brandAvgPrices.sort((a, b) => b.avg - a.avg)
+    const most = brandAvgPrices[0]
+    const least = brandAvgPrices[brandAvgPrices.length - 1]
+    events.push({
+      score: 18,
+      text: `${most.name} is the most premium brand (avg ${Math.round(most.avg).toLocaleString()} EGP), while ${least.name} is the most affordable (avg ${Math.round(least.avg).toLocaleString()} EGP).`
+    })
+  }
+
+  // Sort by score, deduplicate, take top 5
   events.sort((a, b) => b.score - a.score)
   const topEvents = Array.from(new Set(events.map(e => e.text))).slice(0, 5)
 
